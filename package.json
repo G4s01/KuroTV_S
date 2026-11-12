@@ -1,0 +1,37 @@
+{
+  "name": "kurotv-s",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build && npm run build --workspace=packages/sync-client",
+    "deploy": "npx wrangler d1 migrations apply DB --remote && npx wrangler deploy",
+    "test": "vitest run",
+    "test:workers": "vitest run --project workers",
+    "test:client": "vitest run --project client-sdk",
+    "typecheck": "tsc --noEmit && npm run typecheck --workspace=packages/sync-client",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "hono": "^4.13.18"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.69.0",
+    "@cloudflare/vitest-pool-workers": "0.23.0",
+    "@cloudflare/workers-types": "5.20261110.1",
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.2.0",
+    "vitest": "4.1.12",
+    "wrangler": "^4.160.1"
+  }
+}
