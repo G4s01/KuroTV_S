@@ -31,6 +31,26 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
   const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!pairInfo?.expiresAt) {
+      setTimeLeft(null);
+      return;
+    }
+    const updateCountdown = () => {
+      setTimeLeft(Math.max(0, Math.floor((pairInfo.expiresAt - Date.now()) / 1000)));
+    };
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [pairInfo?.expiresAt]);
+
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   // Sync selected profile if profiles list loads
   useEffect(() => {
@@ -238,9 +258,16 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ color: oledTheme.colors.textMuted }}>STATO:</span>
-              <Badge variant={pairInfo.status === 'pending' ? 'warning' : 'danger'}>
-                {pairInfo.status.toUpperCase()}
-              </Badge>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <Badge variant={pairInfo.status === 'pending' ? 'warning' : 'danger'}>
+                  {pairInfo.status.toUpperCase()}
+                </Badge>
+                {timeLeft !== null && (
+                  <Badge variant={timeLeft < 60 ? 'danger' : 'success'}>
+                    {timeLeft > 0 ? `SCADENZA: ${formatTime(timeLeft)}` : 'SCADUTO'}
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -355,13 +382,14 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
         <p
           style={{
             fontFamily: FONT_MONO,
-            fontSize: '12px',
-            color: oledTheme.colors.textSecondary,
-            margin: '0 0 16px 0',
-            lineHeight: 1.4,
+            fontSize: '11px',
+            color: oledTheme.colors.textMuted,
+            margin: '0 0 14px 0',
+            textTransform: 'uppercase',
+            textAlign: 'center',
           }}
         >
-          Inserisci il codice mostrato sullo schermo di KuroTV sulla tua TV per collegarla istantaneamente.
+          INSERISCI IL CODICE DI 6 CARATTERI MOSTRATO SULLA TV
         </p>
         {renderForm()}
       </div>

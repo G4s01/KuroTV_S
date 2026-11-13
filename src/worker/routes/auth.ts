@@ -268,7 +268,7 @@ async function handleExchange(c: Context<AppEnv>) {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
 
-  const rawInputToken = body?.token || body?.exchangeToken;
+  const rawInputToken = (body?.token || body?.exchangeToken || "").trim();
   const { deviceName, deviceType, platform } = body || {};
 
   if (!rawInputToken || typeof rawInputToken !== "string") {
@@ -277,7 +277,7 @@ async function handleExchange(c: Context<AppEnv>) {
 
   const now = Date.now();
 
-  // 1. Check in pairing_codes table (for QR ephemeral codes and pairing codes)
+  // 1. Look up in pairing_codes table (strictly single-use ephemeral QR codes and pairing codes)
   const record = await c.env.DB.prepare(
     "SELECT * FROM pairing_codes WHERE code = ?"
   )
@@ -296,93 +296,56 @@ async function handleExchange(c: Context<AppEnv>) {
       created_at: number;
     }>();
 
-  if (record) {
-    if (record.status === "consumed") {
-      return c.json({ error: "Token già utilizzato o scaduto. Genera un nuovo codice QR." }, 410);
-    }
-
-    if (record.expires_at < now || record.status === "expired") {
-      return c.json({ error: "Token scaduto. Genera un nuovo codice QR." }, 410);
-    }
-
-    if (record.status !== "approved" || !record.approved_profile_id) {
-      return c.json({ error: "Token non in stato approvato" }, 401);
-    }
-
-    // ATOMICALLY consume token: guarantees 100% single-use
-    const consumeRes = await c.env.DB.prepare(
-      "UPDATE pairing_codes SET status = 'consumed' WHERE code = ? AND status = 'approved'"
-    )
-      .bind(rawInputToken)
-      .run();
-
-    if (consumeRes.meta.changes === 0) {
-      return c.json({ error: "Token già utilizzato contemporaneamente" }, 410);
-    }
-
-    const profileId = record.approved_profile_id;
-    const deviceToken = generateDeviceToken();
-    const tokenHash = await hashToken(deviceToken);
-    const deviceId = crypto.randomUUID();
-
-    await c.env.DB.prepare(`
-      INSERT INTO devices (id, profile_id, name, device_type, platform, token_hash, last_seen_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-      .bind(
-        deviceId,
-        profileId,
-        deviceName || record.device_name || "KuroTV Mobile",
-        deviceType || "mobile",
-        platform || record.platform || "android",
-        tokenHash,
-        now,
-        now
-      )
-      .run();
-
-    return c.json({ ok: true, deviceToken, deviceId, profileId }, 200);
+  if (!record) {
+    return c.json({ error: "Invalid or expired exchange token" }, 404);
   }
 
-  // 2. Check if it matches an existing active device token (token migration)
-  const inputHash = await hashToken(rawInputToken);
-  const existingDevice = await c.env.DB.prepare(
-    "SELECT id, profile_id FROM devices WHERE token_hash = ? AND revoked_at IS NULL"
+  if (record.status === "consumed") {
+    return c.json({ error: "Token già utilizzato. Genera un nuovo codice QR." }, 410);
+  }
+
+  if (record.expires_at < now || record.status === "expired") {
+    return c.json({ error: "Token scaduto. Genera un nuovo codice QR." }, 410);
+  }
+
+  if (record.status !== "approved" || !record.approved_profile_id) {
+    return c.json({ error: "Token non autorizzato" }, 401);
+  }
+
+  // ATOMICALLY consume token: guarantees 100% single-use
+  const consumeRes = await c.env.DB.prepare(
+    "UPDATE pairing_codes SET status = 'consumed' WHERE code = ? AND status = 'approved'"
   )
-    .bind(inputHash)
-    .first<{ id: string; profile_id: string }>();
+    .bind(rawInputToken)
+    .run();
 
-  if (existingDevice) {
-    const profileId = existingDevice.profile_id;
-    const deviceToken = generateDeviceToken();
-    const tokenHash = await hashToken(deviceToken);
-    const deviceId = crypto.randomUUID();
-
-    // Revoke the old token so it cannot be reused
-    await c.env.DB.prepare("UPDATE devices SET revoked_at = ? WHERE id = ?")
-      .bind(now, existingDevice.id)
-      .run();
-
-    await c.env.DB.prepare(`
-      INSERT INTO devices (id, profile_id, name, device_type, platform, token_hash, last_seen_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-      .bind(
-        deviceId,
-        profileId,
-        deviceName || "KuroTV Mobile",
-        deviceType || "mobile",
-        platform || "android",
-        tokenHash,
-        now,
-        now
-      )
-      .run();
-
-    return c.json({ ok: true, deviceToken, deviceId, profileId }, 200);
+  const rowsChanged = consumeRes.meta?.changes ?? (consumeRes as any).changes ?? 1;
+  if (rowsChanged === 0) {
+    return c.json({ error: "Token già utilizzato contemporaneamente" }, 410);
   }
 
-  return c.json({ error: "Invalid or expired exchange token" }, 404);
+  const profileId = record.approved_profile_id;
+  const deviceToken = generateDeviceToken();
+  const tokenHash = await hashToken(deviceToken);
+  const deviceId = crypto.randomUUID();
+
+  await c.env.DB.prepare(`
+    INSERT INTO devices (id, profile_id, name, device_type, platform, token_hash, last_seen_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+    .bind(
+      deviceId,
+      profileId,
+      deviceName || record.device_name || "KuroTV Mobile",
+      deviceType || "mobile",
+      platform || record.platform || "android",
+      tokenHash,
+      now,
+      now
+    )
+    .run();
+
+  return c.json({ ok: true, deviceToken, deviceId, profileId }, 200);
 }
 
 authRouter.post("/exchange", handleExchange);

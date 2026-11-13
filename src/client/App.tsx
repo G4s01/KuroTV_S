@@ -258,7 +258,7 @@ export const App: React.FC = () => {
               whiteSpace: 'nowrap',
             }}
           >
-            LIBRARY
+            LIBRERIA
           </button>
           <button
             onClick={() => setActiveTab('profiles')}
@@ -280,7 +280,7 @@ export const App: React.FC = () => {
               whiteSpace: 'nowrap',
             }}
           >
-            PROFILES
+            PROFILI
           </button>
           <button
             onClick={() => setActiveTab('devices')}
@@ -302,7 +302,7 @@ export const App: React.FC = () => {
               whiteSpace: 'nowrap',
             }}
           >
-            DEVICES
+            DISPOSITIVI
           </button>
           <button
             onClick={() => setActiveTab('backup')}
@@ -324,7 +324,7 @@ export const App: React.FC = () => {
               whiteSpace: 'nowrap',
             }}
           >
-            BACKUP &amp; RESTORE
+            BACKUP
           </button>
         </div>
 

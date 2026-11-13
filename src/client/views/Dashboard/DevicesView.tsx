@@ -37,6 +37,8 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
   const [qrExpiresAt, setQrExpiresAt] = useState<number | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [loginSuccess, setLoginSuccess] = useState(false);
 
   // Integrated UI Confirmation Dialog (replaces browser confirm)
   const [confirmModal, setConfirmModal] = useState<{
@@ -90,12 +92,66 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
 
   useEffect(() => {
     if (isQrModalOpen) {
+      setLoginSuccess(false);
       generateQrToken();
     } else {
       setQrToken(null);
       setQrExpiresAt(null);
+      setTimeLeft(null);
+      setLoginSuccess(false);
     }
   }, [isQrModalOpen, activeProfileId]);
+
+  // Real-time Countdown Timer for Ephemeral QR
+  useEffect(() => {
+    if (!qrExpiresAt) {
+      setTimeLeft(null);
+      return;
+    }
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.floor((qrExpiresAt - Date.now()) / 1000));
+      setTimeLeft(remaining);
+    };
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [qrExpiresAt]);
+
+  // Auto-close polling: detects when device exchanges the QR token
+  useEffect(() => {
+    if (!isQrModalOpen || !qrToken || loginSuccess) return;
+
+    let isSubscribed = true;
+    const pollInterval = setInterval(async () => {
+      try {
+        const info = await api.getPairInfo(qrToken);
+        if (!isSubscribed) return;
+        if (info.status === 'consumed') {
+          setLoginSuccess(true);
+          await fetchDevices();
+          setTimeout(() => {
+            if (isSubscribed) {
+              setIsQrModalOpen(false);
+              setLoginSuccess(false);
+            }
+          }, 1200);
+        }
+      } catch {
+        // Polling ignore
+      }
+    }, 1500);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(pollInterval);
+    };
+  }, [isQrModalOpen, qrToken, loginSuccess]);
+
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://kurosync.workers.dev';
   const connectUrl = qrToken
@@ -218,17 +274,18 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
               textTransform: 'uppercase',
             }}
           >
-            Dispositivi Connessi ({devices.length})
+            DISPOSITIVI CONNESSI ({devices.length})
           </h2>
           <p
             style={{
               fontFamily: FONT_MONO,
-              fontSize: '12px',
-              color: oledTheme.colors.textSecondary,
+              fontSize: '11px',
+              color: oledTheme.colors.textMuted,
               margin: 0,
+              textTransform: 'uppercase',
             }}
           >
-            Gestisci le autorizzazioni per Android TV, KuroTV Mobile e Web (ordinati per ultimo accesso).
+            SESSIONI ATTIVE E DISCONNESSE (ORDINE ULTIMO ACCESSO)
           </p>
         </div>
 
@@ -416,136 +473,203 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
         maxWidth="460px"
       >
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-          <p
-            style={{
-              fontFamily: FONT_MONO,
-              fontSize: '12px',
-              color: oledTheme.colors.textSecondary,
-              textAlign: 'center',
-              margin: 0,
-              lineHeight: 1.5,
-            }}
-          >
-            Inquadra questo QR code dall'app <strong>KuroTV Mobile</strong> su <em>Impostazioni &gt; Sincronizzazione</em> per collegarti all'istante.
-          </p>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minHeight: '220px',
-              width: '100%',
-            }}
-          >
-            {qrLoading ? (
+          {loginSuccess ? (
+            <div
+              style={{
+                padding: '24px 16px',
+                backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                border: '1px solid #10B981',
+                borderRadius: oledTheme.radius.sm,
+                color: '#10B981',
+                fontFamily: FONT_MONO,
+                fontWeight: 700,
+                fontSize: '14px',
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '12px',
+                width: '100%',
+                boxSizing: 'border-box',
+              }}
+            >
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: '#10B981',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#000000',
+                }}
+              >
+                <CheckIcon size={24} />
+              </div>
+              <span>ACCESSO EFFETTUATO CON SUCCESSO!</span>
+              <span style={{ fontSize: '11px', color: oledTheme.colors.textMuted }}>
+                CHIUSURA POP-UP IN CORSO...
+              </span>
+            </div>
+          ) : (
+            <>
               <div
                 style={{
                   fontFamily: FONT_MONO,
-                  fontSize: '12px',
-                  color: oledTheme.colors.textMuted,
+                  fontSize: '11px',
+                  color: oledTheme.colors.textSecondary,
+                  textAlign: 'center',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                SCANSIONA DA KUROTV MOBILE (IMPOSTAZIONI &gt; SINCRONIZZAZIONE)
+              </div>
+
+              <div
+                style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px',
+                  justifyContent: 'center',
+                  minHeight: '220px',
+                  width: '100%',
                 }}
               >
-                Generazione token monouso...
+                {qrLoading ? (
+                  <div
+                    style={{
+                      fontFamily: FONT_MONO,
+                      fontSize: '12px',
+                      color: oledTheme.colors.textMuted,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    GENERAZIONE TOKEN...
+                  </div>
+                ) : timeLeft !== null && timeLeft <= 0 ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '24px',
+                      border: `1px solid ${oledTheme.colors.border}`,
+                      borderRadius: oledTheme.radius.sm,
+                      backgroundColor: '#0A0A0A',
+                    }}
+                  >
+                    <span style={{ color: '#EF4444', fontFamily: FONT_MONO, fontSize: '13px', fontWeight: 700 }}>
+                      TOKEN SCADUTO
+                    </span>
+                    <Button variant="primary" size="sm" onClick={generateQrToken}>
+                      RIGENERA QR
+                    </Button>
+                  </div>
+                ) : connectUrl ? (
+                  <QrCode value={connectUrl} size={210} />
+                ) : (
+                  <Button variant="secondary" size="sm" onClick={generateQrToken}>
+                    GENERA QR CODE
+                  </Button>
+                )}
               </div>
-            ) : connectUrl ? (
-              <QrCode value={connectUrl} size={210} />
-            ) : (
-              <Button variant="secondary" size="sm" onClick={generateQrToken}>
-                GENERA QR CODE
-              </Button>
-            )}
-          </div>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              width: '100%',
-              padding: '6px 0',
-            }}
-          >
-            <span
-              style={{
-                fontFamily: FONT_MONO,
-                fontSize: '11px',
-                color: '#10B981',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              <span
+              <div
                 style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  backgroundColor: '#10B981',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  padding: '6px 0',
                 }}
-              />
-              TOKEN MONOUSO (VALIDO 5 MINUTI)
-            </span>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={generateQrToken}
-              loading={qrLoading}
-              icon={<RefreshIcon size={12} />}
-            >
-              RIGENERA QR
-            </Button>
-          </div>
-
-          <div style={{ width: '100%', boxSizing: 'border-box' }}>
-            <label
-              style={{
-                display: 'block',
-                fontFamily: FONT_MONO,
-                fontSize: '10px',
-                fontWeight: 700,
-                color: oledTheme.colors.textMuted,
-                marginBottom: '4px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-              }}
-            >
-              Oppure copia il Deep Link diretto
-            </label>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input
-                type="text"
-                readOnly
-                value={connectUrl}
-                placeholder="Generazione in corso..."
-                style={{
-                  flex: 1,
-                  padding: '8px 10px',
-                  backgroundColor: '#050505',
-                  border: `1px solid ${oledTheme.colors.border}`,
-                  borderRadius: oledTheme.radius.sm,
-                  color: '#FFFFFF',
-                  fontFamily: FONT_MONO,
-                  fontSize: '11px',
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                }}
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleCopyConnectUrl}
-                disabled={!connectUrl}
-                icon={copied ? <CheckIcon size={14} color="#10B981" /> : <CopyIcon size={14} />}
               >
-                {copied ? 'COPIATO' : 'COPIA'}
-              </Button>
-            </div>
-          </div>
+                <span
+                  style={{
+                    fontFamily: FONT_MONO,
+                    fontSize: '11px',
+                    color: timeLeft !== null && timeLeft < 60 ? '#EF4444' : '#10B981',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontWeight: 700,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      backgroundColor: timeLeft !== null && timeLeft < 60 ? '#EF4444' : '#10B981',
+                    }}
+                  />
+                  {timeLeft !== null && timeLeft > 0
+                    ? `SCADENZA: ${formatTime(timeLeft)}`
+                    : 'SCADUTO'}
+                </span>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={generateQrToken}
+                  loading={qrLoading}
+                  icon={<RefreshIcon size={12} />}
+                >
+                  RIGENERA QR
+                </Button>
+              </div>
+
+              <div style={{ width: '100%', boxSizing: 'border-box' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontFamily: FONT_MONO,
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    color: oledTheme.colors.textMuted,
+                    marginBottom: '4px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                  }}
+                >
+                  DEEP LINK DIRETTO
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    readOnly
+                    value={connectUrl}
+                    className="raw-token"
+                    placeholder="GENERAZIONE IN CORSO..."
+                    style={{
+                      flex: 1,
+                      padding: '8px 10px',
+                      backgroundColor: '#050505',
+                      border: `1px solid ${oledTheme.colors.border}`,
+                      borderRadius: oledTheme.radius.sm,
+                      color: '#FFFFFF',
+                      fontFamily: FONT_MONO,
+                      fontSize: '11px',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleCopyConnectUrl}
+                    disabled={!connectUrl}
+                    icon={copied ? <CheckIcon size={14} color="#10B981" /> : <CopyIcon size={14} />}
+                  >
+                    {copied ? 'COPIATO' : 'COPIA'}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </Modal>
 

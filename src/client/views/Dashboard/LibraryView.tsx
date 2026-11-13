@@ -213,9 +213,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
                 padding: '60px 20px',
                 color: oledTheme.colors.textMuted,
                 fontFamily: FONT_MONO,
+                fontSize: '12px',
+                textTransform: 'uppercase',
               }}
             >
-              No items in Continue Watching. Stream episodes on KuroTV to synchronize here.
+              NESSUN ELEMENTO IN CONTINUA A GUARDARE
             </div>
           ) : (
             <div
@@ -400,9 +402,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
                 padding: '60px 20px',
                 color: oledTheme.colors.textMuted,
                 fontFamily: FONT_MONO,
+                fontSize: '12px',
+                textTransform: 'uppercase',
               }}
             >
-              No favorites saved yet.
+              NESSUN ANIME NEI PREFERITI
             </div>
           ) : (
             <div
@@ -520,9 +524,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
                 padding: '60px 20px',
                 color: oledTheme.colors.textMuted,
                 fontFamily: FONT_MONO,
+                fontSize: '12px',
+                textTransform: 'uppercase',
               }}
             >
-              Watch history is empty.
+              CRONOLOGIA DI VISIONE VUOTA
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

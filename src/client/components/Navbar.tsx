@@ -162,9 +162,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             size="sm"
             onClick={onOpenTvPair}
             icon={<TvIcon size={14} color="#E50914" />}
-            title="Pair Android TV"
+            title="ACCOPPIA ANDROID TV"
           >
-            PAIR TV
+            ACCOPPIA TV
           </Button>
 
           {/* Backup Shortcut */}
@@ -173,7 +173,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             size="sm"
             onClick={onOpenBackup}
             icon={<DownloadIcon size={14} />}
-            title="Backup & Restore"
+            title="BACKUP & RIPRISTINO"
           >
             BACKUP
           </Button>
@@ -184,8 +184,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             size="sm"
             onClick={onLogout}
             icon={<LogOutIcon size={14} />}
-            title="Logout"
-            aria-label="Logout"
+            title="DISCONNETTI"
+            aria-label="DISCONNETTI"
           />
         </div>
       </div>

@@ -327,6 +327,19 @@ export class KuroSyncApi {
     });
   }
 
+  public async updateProfile(
+    id: string,
+    data: { name?: string; avatarColor?: string }
+  ): Promise<{ ok: boolean; profile: ProfileRecord }> {
+    return this.request<{ ok: boolean; profile: ProfileRecord }>(
+      `/api/profiles/${encodeURIComponent(id)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
   public async deleteProfile(id: string): Promise<{ ok: boolean; deletedId: string }> {
     return this.request<{ ok: boolean; deletedId: string }>(`/api/profiles/${encodeURIComponent(id)}`, {
       method: 'DELETE',

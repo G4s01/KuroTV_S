@@ -48,15 +48,15 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
     setError(null);
 
     if (masterPassword.length < 8) {
-      setError('Master Password must be at least 8 characters long');
+      setError('LA PASSWORD MASTER DEVE CONTENERE ALMENO 8 CARATTERI');
       return;
     }
     if (masterPassword !== confirmPassword) {
-      setError('Passwords do not match');
+      setError('LE PASSWORD NON COINCIDONO');
       return;
     }
     if (!profileName.trim()) {
-      setError('Profile name cannot be empty');
+      setError('IL NOME PROFILO NON PUÒ ESSERE VUOTO');
       return;
     }
 
@@ -65,7 +65,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
       await api.setup(masterPassword, profileName.trim(), avatarColor);
       onSetupSuccess();
     } catch (err: any) {
-      setError(err?.message || 'Setup initialization failed. Please try again.');
+      setError(err?.message ? err.message.toUpperCase() : 'INIZIALIZZAZIONE FALLITA. RIPROVA.');
     } finally {
       setLoading(false);
     }
@@ -115,12 +115,13 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
           <p
             style={{
               fontFamily: FONT_MONO,
-              fontSize: '13px',
-              color: oledTheme.colors.textSecondary,
+              fontSize: '11px',
+              color: oledTheme.colors.textMuted,
               margin: 0,
+              textTransform: 'uppercase',
             }}
           >
-            Zero-Config initialization for your private Cloudflare Worker instance.
+            CONFIGURAZIONE PRIMO AVVIO ISTANZA
           </p>
         </div>
 
@@ -134,8 +135,9 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
                   border: '1px solid #EF4444',
                   borderRadius: oledTheme.radius.sm,
                   color: '#EF4444',
-                  fontSize: '13px',
+                  fontSize: '12px',
                   fontFamily: FONT_MONO,
+                  textTransform: 'uppercase',
                 }}
               >
                 {error}
@@ -155,13 +157,13 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
                 <label
                   style={{
                     fontFamily: FONT_MONO,
-                    fontSize: '12px',
+                    fontSize: '11px',
                     fontWeight: 700,
                     textTransform: 'uppercase',
                     color: oledTheme.colors.textSecondary,
                   }}
                 >
-                  Master Password
+                  MASTER PASSWORD
                 </label>
                 <button
                   type="button"
@@ -178,14 +180,14 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
                     padding: 0,
                   }}
                 >
-                  GENERATE SECURE
+                  GENERA SICURA
                 </button>
               </div>
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={masterPassword}
                 onChange={(e) => setMasterPassword(e.target.value)}
-                placeholder="Min. 8 characters"
+                placeholder="MIN. 8 CARATTERI"
                 required
                 style={{
                   width: '100%',
@@ -197,6 +199,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
                   fontFamily: FONT_MONO,
                   fontSize: '14px',
                   outline: 'none',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
@@ -207,20 +210,20 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
                 style={{
                   display: 'block',
                   fontFamily: FONT_MONO,
-                  fontSize: '12px',
+                  fontSize: '11px',
                   fontWeight: 700,
                   textTransform: 'uppercase',
                   color: oledTheme.colors.textSecondary,
                   marginBottom: '8px',
                 }}
               >
-                Confirm Password
+                CONFERMA PASSWORD
               </label>
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Repeat master password"
+                placeholder="RIPETI MASTER PASSWORD"
                 required
                 style={{
                   width: '100%',
@@ -232,6 +235,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
                   fontFamily: FONT_MONO,
                   fontSize: '14px',
                   outline: 'none',
+                  boxSizing: 'border-box',
                 }}
               />
               <div style={{ marginTop: '6px' }}>
@@ -244,6 +248,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
                     fontFamily: FONT_MONO,
                     color: oledTheme.colors.textMuted,
                     cursor: 'pointer',
+                    textTransform: 'uppercase',
                   }}
                 >
                   <input
@@ -251,7 +256,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
                     checked={showPassword}
                     onChange={(e) => setShowPassword(e.target.checked)}
                   />
-                  Show password
+                  MOSTRA PASSWORD
                 </label>
               </div>
             </div>
@@ -262,20 +267,20 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
                 style={{
                   display: 'block',
                   fontFamily: FONT_MONO,
-                  fontSize: '12px',
+                  fontSize: '11px',
                   fontWeight: 700,
                   textTransform: 'uppercase',
                   color: oledTheme.colors.textSecondary,
                   marginBottom: '8px',
                 }}
               >
-                Initial Profile Name
+                NOME PRIMO PROFILO
               </label>
               <input
                 type="text"
                 value={profileName}
                 onChange={(e) => setProfileName(e.target.value)}
-                placeholder="e.g. Principale"
+                placeholder="ES. PRINCIPALE"
                 required
                 style={{
                   width: '100%',
@@ -287,6 +292,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
                   fontFamily: FONT_MONO,
                   fontSize: '14px',
                   outline: 'none',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
@@ -297,14 +303,14 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
                 style={{
                   display: 'block',
                   fontFamily: FONT_MONO,
-                  fontSize: '12px',
+                  fontSize: '11px',
                   fontWeight: 700,
                   textTransform: 'uppercase',
                   color: oledTheme.colors.textSecondary,
                   marginBottom: '8px',
                 }}
               >
-                Avatar Color
+                COLORE AVATAR
               </label>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {AVATAR_COLORS.map((color) => (
@@ -339,7 +345,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
               loading={loading}
               style={{ width: '100%', marginTop: '8px' }}
             >
-              INITIALIZE INSTANCE
+              INIZIALIZZA ISTANZA
             </Button>
           </form>
         </Card>

@@ -23,6 +23,7 @@
         -moz-osx-font-smoothing: grayscale;
         color-scheme: dark;
         overflow-x: hidden;
+        text-transform: uppercase;
       }
       #root {
         min-height: 100vh;
@@ -31,6 +32,10 @@
       }
       input, button, select, textarea {
         font-family: inherit;
+        text-transform: uppercase;
+      }
+      input[type="password"], .raw-token, .code-preview {
+        text-transform: none;
       }
       /* Custom OLED Scrollbar */
       ::-webkit-scrollbar {

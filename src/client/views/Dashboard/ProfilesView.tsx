@@ -4,7 +4,7 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
 import { ConfirmModal } from '../../components/ConfirmModal';
-import { PlusIcon, TrashIcon, UserIcon, CheckIcon } from '../../components/Icons';
+import { PlusIcon, TrashIcon, UserIcon, CheckIcon, EditIcon } from '../../components/Icons';
 import { api, type ProfileRecord } from '../../api';
 
 const AVATAR_COLORS = [
@@ -35,6 +35,13 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
   const [newProfileName, setNewProfileName] = useState('');
   const [newProfileColor, setNewProfileColor] = useState('#E50914');
   const [creating, setCreating] = useState(false);
+
+  // Edit / Rename Profile state
+  const [editingProfile, setEditingProfile] = useState<ProfileRecord | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editColor, setEditColor] = useState('#E50914');
+  const [savingEdit, setSavingEdit] = useState(false);
+
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,6 +78,33 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
       setError(err?.message || 'Impossibile creare il profilo.');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleOpenEdit = (p: ProfileRecord) => {
+    setEditingProfile(p);
+    setEditName(p.name);
+    setEditColor(p.avatarColor || p.avatar_color || '#E50914');
+    setError(null);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProfile || !editName.trim()) return;
+
+    setSavingEdit(true);
+    setError(null);
+    try {
+      await api.updateProfile(editingProfile.id, {
+        name: editName.trim(),
+        avatarColor: editColor,
+      });
+      await onRefreshProfiles();
+      setEditingProfile(null);
+    } catch (err: any) {
+      setError(err?.message || 'Impossibile aggiornare il profilo.');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -131,17 +165,18 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
               textTransform: 'uppercase',
             }}
           >
-            Profiles ({profiles.length})
+            PROFILI ({profiles.length})
           </h2>
           <p
             style={{
               fontFamily: FONT_MONO,
-              fontSize: '12px',
-              color: oledTheme.colors.textSecondary,
+              fontSize: '11px',
+              color: oledTheme.colors.textMuted,
               margin: 0,
+              textTransform: 'uppercase',
             }}
           >
-            Manage household profiles. Each profile maintains isolated viewing data.
+            PROFILI DI VISIONE INDIPENDENTI
           </p>
         </div>
 
@@ -151,7 +186,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
           onClick={() => setIsCreateModalOpen(true)}
           icon={<PlusIcon size={14} />}
         >
-          NEW PROFILE
+          NUOVO PROFILO
         </Button>
       </div>
 
@@ -258,30 +293,43 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
                     size="sm"
                     onClick={() => onSelectProfile(p.id)}
                   >
-                    SWITCH TO
+                    ATTIVA
                   </Button>
                 ) : (
                   <span
                     style={{
-                      fontSize: '12px',
+                      fontSize: '11px',
                       fontFamily: FONT_MONO,
                       color: oledTheme.colors.textMuted,
+                      fontWeight: 700,
                     }}
                   >
-                    Current Profile
+                    PROFILO ATTIVO
                   </span>
                 )}
 
-                {profiles.length > 1 && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
-                    loading={deletingId === p.id}
-                    onClick={() => handleDeleteProfile(p.id, p.name)}
-                    icon={<TrashIcon size={14} color="#EF4444" />}
-                    title="Delete profile"
-                  />
-                )}
+                    onClick={() => handleOpenEdit(p)}
+                    icon={<EditIcon size={12} />}
+                    title="MODIFICA PROFILO"
+                  >
+                    MODIFICA
+                  </Button>
+
+                  {profiles.length > 1 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={deletingId === p.id}
+                      onClick={() => handleDeleteProfile(p.id, p.name)}
+                      icon={<TrashIcon size={14} color="#EF4444" />}
+                      title="ELIMINA PROFILO"
+                    />
+                  )}
+                </div>
               </div>
             </Card>
           );
@@ -292,7 +340,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        title="CREATE NEW PROFILE"
+        title="CREA NUOVO PROFILO"
       >
         <form onSubmit={handleCreateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {error && (
@@ -305,6 +353,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
                 color: '#EF4444',
                 fontSize: '12px',
                 fontFamily: FONT_MONO,
+                textTransform: 'uppercase',
               }}
             >
               {error}
@@ -316,20 +365,20 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
               style={{
                 display: 'block',
                 fontFamily: FONT_MONO,
-                fontSize: '12px',
+                fontSize: '11px',
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 color: oledTheme.colors.textSecondary,
                 marginBottom: '8px',
               }}
             >
-              Profile Name
+              NOME PROFILO
             </label>
             <input
               type="text"
               value={newProfileName}
               onChange={(e) => setNewProfileName(e.target.value)}
-              placeholder="e.g. Salotto TV, Marco"
+              placeholder="ES. SALOTTO TV, MARCO"
               required
               autoFocus
               style={{
@@ -340,8 +389,9 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
                 borderRadius: oledTheme.radius.sm,
                 color: '#FFFFFF',
                 fontFamily: FONT_MONO,
-                fontSize: '14px',
+                fontSize: '13px',
                 outline: 'none',
+                boxSizing: 'border-box',
               }}
             />
           </div>
@@ -351,14 +401,14 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
               style={{
                 display: 'block',
                 fontFamily: FONT_MONO,
-                fontSize: '12px',
+                fontSize: '11px',
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 color: oledTheme.colors.textSecondary,
                 marginBottom: '8px',
               }}
             >
-              Avatar Color
+              COLORE AVATAR
             </label>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {AVATAR_COLORS.map((c) => (
@@ -392,7 +442,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
               onClick={() => setIsCreateModalOpen(false)}
               style={{ flex: 1 }}
             >
-              CANCEL
+              ANNULLA
             </Button>
             <Button
               type="submit"
@@ -400,7 +450,127 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
               loading={creating}
               style={{ flex: 1 }}
             >
-              CREATE
+              CREA
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Profile Modal */}
+      <Modal
+        isOpen={!!editingProfile}
+        onClose={() => setEditingProfile(null)}
+        title="MODIFICA PROFILO"
+      >
+        <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {error && (
+            <div
+              style={{
+                padding: '10px 12px',
+                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid #EF4444',
+                borderRadius: oledTheme.radius.sm,
+                color: '#EF4444',
+                fontSize: '12px',
+                fontFamily: FONT_MONO,
+                textTransform: 'uppercase',
+              }}
+            >
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label
+              style={{
+                display: 'block',
+                fontFamily: FONT_MONO,
+                fontSize: '11px',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                color: oledTheme.colors.textSecondary,
+                marginBottom: '8px',
+              }}
+            >
+              NOME PROFILO
+            </label>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              placeholder="NOME DEL PROFILO"
+              required
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                backgroundColor: '#050505',
+                border: `1px solid ${oledTheme.colors.border}`,
+                borderRadius: oledTheme.radius.sm,
+                color: '#FFFFFF',
+                fontFamily: FONT_MONO,
+                fontSize: '13px',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          <div>
+            <label
+              style={{
+                display: 'block',
+                fontFamily: FONT_MONO,
+                fontSize: '11px',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                color: oledTheme.colors.textSecondary,
+                marginBottom: '8px',
+              }}
+            >
+              COLORE AVATAR
+            </label>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {AVATAR_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setEditColor(c)}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    backgroundColor: c,
+                    border: editColor === c ? '2px solid #FFFFFF' : '2px solid transparent',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    outline: 'none',
+                  }}
+                >
+                  {editColor === c && <CheckIcon size={16} color="#FFFFFF" />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setEditingProfile(null)}
+              style={{ flex: 1 }}
+            >
+              ANNULLA
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              loading={savingEdit}
+              style={{ flex: 1 }}
+            >
+              SALVA MODIFICHE
             </Button>
           </div>
         </form>

@@ -25,11 +25,11 @@ export const MasterLogin: React.FC<MasterLoginProps> = ({ onLoginSuccess }) => {
       onLoginSuccess();
     } catch (err: any) {
       if (err?.status === 429) {
-        setError('Rate limit exceeded: Too many login attempts. Please wait 1 minute.');
+        setError('TROPPI TENTATIVI. ATTENDI 1 MINUTO.');
       } else if (err?.status === 401) {
-        setError('Invalid master password. Please verify your credentials.');
+        setError('PASSWORD MASTER NON VALIDA.');
       } else {
-        setError(err?.message || 'Login failed. Please check connection and try again.');
+        setError(err?.message ? err.message.toUpperCase() : 'ACCESSO FALLITO. RIPROVA.');
       }
     } finally {
       setLoading(false);
@@ -80,12 +80,13 @@ export const MasterLogin: React.FC<MasterLoginProps> = ({ onLoginSuccess }) => {
           <p
             style={{
               fontFamily: FONT_MONO,
-              fontSize: '13px',
-              color: oledTheme.colors.textSecondary,
+              fontSize: '11px',
+              color: oledTheme.colors.textMuted,
               margin: 0,
+              textTransform: 'uppercase',
             }}
           >
-            Enter your Master Password to access your sync instance.
+            ACCESSO AMMINISTRATORE ISTANZA
           </p>
         </div>
 
@@ -99,8 +100,9 @@ export const MasterLogin: React.FC<MasterLoginProps> = ({ onLoginSuccess }) => {
                   border: '1px solid #EF4444',
                   borderRadius: oledTheme.radius.sm,
                   color: '#EF4444',
-                  fontSize: '13px',
+                  fontSize: '12px',
                   fontFamily: FONT_MONO,
+                  textTransform: 'uppercase',
                 }}
               >
                 {error}
@@ -112,20 +114,20 @@ export const MasterLogin: React.FC<MasterLoginProps> = ({ onLoginSuccess }) => {
                 style={{
                   display: 'block',
                   fontFamily: FONT_MONO,
-                  fontSize: '12px',
+                  fontSize: '11px',
                   fontWeight: 700,
                   textTransform: 'uppercase',
                   color: oledTheme.colors.textSecondary,
                   marginBottom: '8px',
                 }}
               >
-                Master Password
+                MASTER PASSWORD
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password..."
+                placeholder="INSERISCI PASSWORD..."
                 required
                 autoFocus
                 style={{
@@ -138,6 +140,7 @@ export const MasterLogin: React.FC<MasterLoginProps> = ({ onLoginSuccess }) => {
                   fontFamily: FONT_MONO,
                   fontSize: '14px',
                   outline: 'none',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
@@ -150,7 +153,7 @@ export const MasterLogin: React.FC<MasterLoginProps> = ({ onLoginSuccess }) => {
               icon={<KeyIcon size={16} />}
               style={{ width: '100%' }}
             >
-              AUTHENTICATE
+              ACCEDI
             </Button>
           </form>
         </Card>

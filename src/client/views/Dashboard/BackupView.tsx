@@ -121,17 +121,18 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
             textTransform: 'uppercase',
           }}
         >
-          Backup &amp; Restore
+          BACKUP &amp; RIPRISTINO
         </h2>
         <p
           style={{
             fontFamily: FONT_MONO,
-            fontSize: '12px',
-            color: oledTheme.colors.textSecondary,
+            fontSize: '11px',
+            color: oledTheme.colors.textMuted,
             margin: 0,
+            textTransform: 'uppercase',
           }}
         >
-          Export full JSON instance snapshots or restore viewing history and profile configuration.
+          SNAPSHOT JSON COMPLETO DELL'ISTANZA
         </p>
       </div>
 
@@ -145,6 +146,7 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
             color: '#EF4444',
             fontSize: '13px',
             fontFamily: FONT_MONO,
+            textTransform: 'uppercase',
           }}
         >
           {error}
@@ -164,6 +166,7 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
+            textTransform: 'uppercase',
           }}
         >
           <CheckIcon size={16} color="#10B981" />
@@ -191,18 +194,18 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
                 textTransform: 'uppercase',
               }}
             >
-              Export JSON Backup
+              ESPORTA BACKUP JSON
             </h3>
             <p
               style={{
                 fontFamily: FONT_MONO,
-                fontSize: '12px',
-                color: oledTheme.colors.textSecondary,
-                lineHeight: 1.5,
+                fontSize: '11px',
+                color: oledTheme.colors.textMuted,
                 margin: 0,
+                textTransform: 'uppercase',
               }}
             >
-              Downloads an encrypted-ready JSON document containing all instance profiles, continue watching progress, favorites, and settings.
+              SCARICA SNAPSHOT DI TUTTI I PROFILI E DELLA LIBRERIA
             </p>
           </div>
 
@@ -212,7 +215,7 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
             loading={exporting}
             icon={<DownloadIcon size={16} />}
           >
-            DOWNLOAD BACKUP (.JSON)
+            SCARICA BACKUP (.JSON)
           </Button>
         </Card>
 
@@ -229,18 +232,18 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
                 textTransform: 'uppercase',
               }}
             >
-              Restore from JSON Backup
+              RIPRISTINA BACKUP JSON
             </h3>
             <p
               style={{
                 fontFamily: FONT_MONO,
-                fontSize: '12px',
-                color: oledTheme.colors.textSecondary,
-                lineHeight: 1.5,
+                fontSize: '11px',
+                color: oledTheme.colors.textMuted,
                 margin: 0,
+                textTransform: 'uppercase',
               }}
             >
-              Select a previously exported KuroSync backup file to restore records atomically into Cloudflare D1.
+              CARICA SNAPSHOT PER SINCRONIZZARE I RECORD SU D1
             </p>
           </div>
 
@@ -267,12 +270,13 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
               <span
                 style={{
                   fontFamily: FONT_MONO,
-                  fontSize: '13px',
-                  fontWeight: 600,
+                  fontSize: '12px',
+                  fontWeight: 700,
                   color: fileName ? '#FFFFFF' : oledTheme.colors.textSecondary,
+                  textTransform: 'uppercase',
                 }}
               >
-                {fileName || 'Click or drop KuroSync JSON backup here'}
+                {fileName || 'CLICCA O TRASCINA IL FILE JSON QUI'}
               </span>
             </div>
           </label>
@@ -285,30 +289,31 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
                 border: `1px solid ${oledTheme.colors.border}`,
                 borderRadius: oledTheme.radius.sm,
                 padding: '12px 14px',
-                fontSize: '12px',
+                fontSize: '11px',
                 fontFamily: FONT_MONO,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '6px',
+                textTransform: 'uppercase',
               }}
             >
               <span style={{ color: oledTheme.colors.textMuted, fontWeight: 700 }}>
-                PAYLOAD SUMMARY:
+                RIEPILOGO DATI:
               </span>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: oledTheme.colors.textSecondary }}>Profiles:</span>
+                <span style={{ color: oledTheme.colors.textSecondary }}>PROFILI:</span>
                 <span style={{ color: '#FFFFFF' }}>{importPayload.profiles?.length || 0}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: oledTheme.colors.textSecondary }}>Continue Watching:</span>
+                <span style={{ color: oledTheme.colors.textSecondary }}>CONTINUA A GUARDARE:</span>
                 <span style={{ color: '#FFFFFF' }}>{importPayload.continueWatching?.length || 0}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: oledTheme.colors.textSecondary }}>Favorites:</span>
+                <span style={{ color: oledTheme.colors.textSecondary }}>PREFERITI:</span>
                 <span style={{ color: '#FFFFFF' }}>{importPayload.favorites?.length || 0}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: oledTheme.colors.textSecondary }}>Watch History:</span>
+                <span style={{ color: oledTheme.colors.textSecondary }}>CRONOLOGIA:</span>
                 <span style={{ color: '#FFFFFF' }}>{importPayload.watchHistory?.length || 0}</span>
               </div>
             </div>
@@ -321,7 +326,7 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
             onClick={handleImport}
             icon={<UploadIcon size={16} />}
           >
-            RESTORE TO INSTANCE
+            RIPRISTINA SU ISTANZA
           </Button>
         </Card>
       </div>

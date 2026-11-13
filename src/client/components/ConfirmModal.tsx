@@ -38,6 +38,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             color: '#FFFFFF',
             margin: 0,
             lineHeight: 1.5,
+            textTransform: 'uppercase',
           }}
         >
           {message}
@@ -51,6 +52,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
               color: oledTheme.colors.textMuted,
               margin: 0,
               lineHeight: 1.4,
+              textTransform: 'uppercase',
             }}
           >
             {submessage}
