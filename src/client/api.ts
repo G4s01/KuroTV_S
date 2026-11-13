@@ -313,13 +313,31 @@ export class KuroSyncApi {
     return this.request<{ ok: boolean; devices: DeviceRecord[] }>(url);
   }
 
-  public async revokeDevice(id: string): Promise<{ ok: boolean; revokedId: string; revokedAt: number }> {
-    return this.request<{ ok: boolean; revokedId: string; revokedAt: number }>(
+  public async revokeDevice(id: string): Promise<{ ok: boolean; revokedId?: string; revokedAt?: number; deletedId?: string; purged?: boolean }> {
+    return this.request<{ ok: boolean; revokedId?: string; revokedAt?: number; deletedId?: string; purged?: boolean }>(
       `/api/devices/${encodeURIComponent(id)}`,
       {
         method: 'DELETE',
       }
     );
+  }
+
+  public async deleteDevicePermanently(id: string): Promise<{ ok: boolean; deletedId: string; purged: boolean }> {
+    return this.request<{ ok: boolean; deletedId: string; purged: boolean }>(
+      `/api/devices/${encodeURIComponent(id)}?purge=true`,
+      {
+        method: 'DELETE',
+      }
+    );
+  }
+
+  public async purgeRevokedDevices(profileId?: string): Promise<{ ok: boolean; purgedCount: number }> {
+    const url = profileId
+      ? `/api/devices/revoked?profileId=${encodeURIComponent(profileId)}`
+      : '/api/devices/revoked';
+    return this.request<{ ok: boolean; purgedCount: number }>(url, {
+      method: 'DELETE',
+    });
   }
 
   /**

@@ -351,9 +351,11 @@ export const App: React.FC = () => {
       <Modal
         isOpen={isTvPairModalOpen}
         onClose={() => setIsTvPairModalOpen(false)}
-        title="PAIR ANDROID TV"
+        title="AUTORIZZA ANDROID TV"
+        maxWidth="460px"
       >
         <TvPairView
+          isModal
           profiles={profiles}
           onComplete={() => {
             setIsTvPairModalOpen(false);

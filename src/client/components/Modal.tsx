@@ -14,7 +14,7 @@ export const Modal: React.FC<ModalProps> = ({
   onClose,
   title,
   children,
-  maxWidth = '500px',
+  maxWidth = '480px',
 }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -45,9 +45,10 @@ export const Modal: React.FC<ModalProps> = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: oledTheme.colors.overlay,
-        backdropFilter: 'blur(4px)',
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        backdropFilter: 'blur(8px)',
         padding: '16px',
+        animation: 'kuro-modal-fade 0.2s ease-out',
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
@@ -61,14 +62,16 @@ export const Modal: React.FC<ModalProps> = ({
           maxWidth,
           backgroundColor: '#0A0A0A',
           border: `1px solid ${oledTheme.colors.border}`,
-          borderRadius: oledTheme.radius.lg,
-          padding: '24px',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.9), 0 10px 10px -5px rgba(0, 0, 0, 0.8)',
+          borderTop: '2px solid #E50914',
+          borderRadius: oledTheme.radius.md,
+          padding: '20px 22px',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.95), 0 0 20px rgba(229, 9, 20, 0.08)',
           display: 'flex',
           flexDirection: 'column',
-          gap: '20px',
-          maxHeight: '90vh',
+          gap: '16px',
+          maxHeight: '85vh',
           overflowY: 'auto',
+          animation: 'kuro-modal-zoom 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
       >
         <div
@@ -77,22 +80,34 @@ export const Modal: React.FC<ModalProps> = ({
             alignItems: 'center',
             justifyContent: 'space-between',
             borderBottom: `1px solid ${oledTheme.colors.border}`,
-            paddingBottom: '14px',
+            paddingBottom: '12px',
           }}
         >
-          <h2
-            style={{
-              margin: 0,
-              fontSize: '18px',
-              fontFamily: FONT_MONO,
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              color: oledTheme.colors.text,
-            }}
-          >
-            {title}
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span
+              style={{
+                display: 'inline-block',
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: '#E50914',
+                boxShadow: '0 0 8px #E50914',
+              }}
+            />
+            <h2
+              style={{
+                margin: 0,
+                fontSize: '15px',
+                fontFamily: FONT_MONO,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                color: '#FFFFFF',
+              }}
+            >
+              {title}
+            </h2>
+          </div>
           <button
             onClick={onClose}
             aria-label="Close"
@@ -100,14 +115,21 @@ export const Modal: React.FC<ModalProps> = ({
               background: 'transparent',
               border: 'none',
               color: oledTheme.colors.textMuted,
-              fontSize: '22px',
+              fontSize: '20px',
               lineHeight: 1,
               cursor: 'pointer',
-              padding: '4px',
-              transition: 'color 0.15s ease',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              transition: 'all 0.15s ease',
             }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#FFFFFF')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = oledTheme.colors.textMuted)}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.color = '#FFFFFF';
+              (e.currentTarget as HTMLElement).style.backgroundColor = '#1F1F1F';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.color = oledTheme.colors.textMuted;
+              (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+            }}
           >
             &times;
           </button>
@@ -115,6 +137,16 @@ export const Modal: React.FC<ModalProps> = ({
 
         <div>{children}</div>
       </div>
+      <style>{`
+        @keyframes kuro-modal-fade {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes kuro-modal-zoom {
+          from { opacity: 0; transform: scale(0.96) translateY(-6px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+      `}</style>
     </div>
   );
 };

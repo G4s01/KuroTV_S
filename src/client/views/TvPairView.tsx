@@ -3,14 +3,15 @@ import { oledTheme, FONT_MONO } from '../theme';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Badge } from '../components/Badge';
-import { TvIcon, CheckIcon, ShieldIcon, RefreshIcon } from '../components/Icons';
+import { TvIcon, CheckIcon } from '../components/Icons';
 import { api, type PairInfoResponse, type ProfileRecord } from '../api';
 
-interface TvPairViewProps {
+export interface TvPairViewProps {
   initialCode?: string;
   profiles: ProfileRecord[];
   onComplete?: () => void;
   onNavigateHome?: () => void;
+  isModal?: boolean;
 }
 
 export const TvPairView: React.FC<TvPairViewProps> = ({
@@ -18,6 +19,7 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
   profiles,
   onComplete,
   onNavigateHome,
+  isModal = false,
 }) => {
   const [code, setCode] = useState(initialCode.toUpperCase());
   const [deviceLabel, setDeviceLabel] = useState('');
@@ -48,7 +50,7 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
       setDeviceLabel(info.deviceName || 'Android TV');
     } catch (err: any) {
       setPairInfo(null);
-      setError(err?.message || 'Invalid or expired pairing code.');
+      setError(err?.message || 'Codice TV non valido o scaduto.');
     } finally {
       setLoadingInfo(false);
     }
@@ -71,11 +73,11 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
 
   const handleApprove = async () => {
     if (!code || code.length !== 6) {
-      setError('Please enter a valid 6-character pairing code');
+      setError('Inserisci un codice valido di 6 caratteri.');
       return;
     }
     if (!selectedProfileId) {
-      setError('Please select a profile to link with this TV');
+      setError('Seleziona un profilo da associare alla TV.');
       return;
     }
 
@@ -86,12 +88,287 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
       setSuccess(true);
       if (onComplete) onComplete();
     } catch (err: any) {
-      setError(err?.message || 'Failed to approve pairing code.');
+      setError(err?.message || 'Impossibile autorizzare la TV.');
     } finally {
       setApproving(false);
     }
   };
 
+  // Form content used in both modal and standalone mode
+  const renderForm = () => {
+    if (success) {
+      return (
+        <div style={{ textAlign: 'center', padding: isModal ? '10px 0' : '16px 0' }}>
+          <div
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(16, 185, 129, 0.15)',
+              border: '1px solid #10B981',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 12px auto',
+            }}
+          >
+            <CheckIcon size={22} color="#10B981" />
+          </div>
+          <h2
+            style={{
+              fontFamily: FONT_MONO,
+              fontSize: '16px',
+              fontWeight: 700,
+              color: '#FFFFFF',
+              margin: '0 0 6px 0',
+            }}
+          >
+            TV AUTORIZZATA CON SUCCESSO!
+          </h2>
+          <p
+            style={{
+              fontFamily: FONT_MONO,
+              fontSize: '12px',
+              color: oledTheme.colors.textSecondary,
+              lineHeight: 1.5,
+              margin: '0 0 18px 0',
+            }}
+          >
+            La tua TV ha ricevuto le credenziali di sincronizzazione ed è ora collegata. Puoi tornare alla TV.
+          </p>
+          {onNavigateHome && (
+            <Button variant="primary" onClick={onNavigateHome} style={{ width: '100%' }}>
+              {isModal ? 'CHIUDI' : 'TORNA ALLA DASHBOARD'}
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {error && (
+          <div
+            style={{
+              padding: '10px 12px',
+              backgroundColor: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid #EF4444',
+              borderRadius: oledTheme.radius.sm,
+              color: '#EF4444',
+              fontSize: '12px',
+              fontFamily: FONT_MONO,
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        {/* Code Input */}
+        <div>
+          <label
+            style={{
+              display: 'block',
+              fontFamily: FONT_MONO,
+              fontSize: '11px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              color: oledTheme.colors.textSecondary,
+              marginBottom: '6px',
+              textAlign: 'center',
+            }}
+          >
+            CODICE TV (6 CARATTERI)
+          </label>
+          <input
+            type="text"
+            value={code}
+            onChange={handleCodeChange}
+            placeholder="ES. K7R49P"
+            maxLength={6}
+            autoFocus
+            style={{
+              width: '100%',
+              padding: '10px 14px',
+              backgroundColor: '#050505',
+              border: `2px solid ${
+                code.length === 6 ? oledTheme.colors.primary : oledTheme.colors.border
+              }`,
+              borderRadius: oledTheme.radius.md,
+              color: '#FFFFFF',
+              fontFamily: FONT_MONO,
+              fontSize: '22px',
+              fontWeight: 900,
+              textAlign: 'center',
+              letterSpacing: '0.25em',
+              textTransform: 'uppercase',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        {/* Device Metadata Preview */}
+        {loadingInfo && (
+          <div style={{ textAlign: 'center', color: oledTheme.colors.textMuted, fontSize: '11px', fontFamily: FONT_MONO }}>
+            Verifica codice in corso...
+          </div>
+        )}
+
+        {pairInfo && (
+          <div
+            style={{
+              padding: '10px 14px',
+              backgroundColor: '#121212',
+              borderRadius: oledTheme.radius.sm,
+              border: `1px solid ${oledTheme.colors.border}`,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              fontSize: '11px',
+              fontFamily: FONT_MONO,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: oledTheme.colors.textMuted }}>DISPOSITIVO:</span>
+              <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{pairInfo.deviceName}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: oledTheme.colors.textMuted }}>PIATTAFORMA:</span>
+              <span style={{ color: '#FFFFFF' }}>{pairInfo.platform}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: oledTheme.colors.textMuted }}>STATO:</span>
+              <Badge variant={pairInfo.status === 'pending' ? 'warning' : 'danger'}>
+                {pairInfo.status.toUpperCase()}
+              </Badge>
+            </div>
+          </div>
+        )}
+
+        {/* Profile Selection */}
+        <div>
+          <label
+            style={{
+              display: 'block',
+              fontFamily: FONT_MONO,
+              fontSize: '11px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              color: oledTheme.colors.textSecondary,
+              marginBottom: '6px',
+            }}
+          >
+            Associa al Profilo
+          </label>
+          <select
+            value={selectedProfileId}
+            onChange={(e) => setSelectedProfileId(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              backgroundColor: '#050505',
+              border: `1px solid ${oledTheme.colors.border}`,
+              borderRadius: oledTheme.radius.sm,
+              color: '#FFFFFF',
+              fontFamily: FONT_MONO,
+              fontSize: '13px',
+              outline: 'none',
+              cursor: 'pointer',
+              boxSizing: 'border-box',
+            }}
+          >
+            {profiles.map((p) => (
+              <option
+                key={p.id}
+                value={p.id}
+                style={{ backgroundColor: '#121212', color: '#FFFFFF' }}
+              >
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Device Label */}
+        <div>
+          <label
+            style={{
+              display: 'block',
+              fontFamily: FONT_MONO,
+              fontSize: '11px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              color: oledTheme.colors.textSecondary,
+              marginBottom: '6px',
+            }}
+          >
+            Nome Dispositivo (Opzionale)
+          </label>
+          <input
+            type="text"
+            value={deviceLabel}
+            onChange={(e) => setDeviceLabel(e.target.value)}
+            placeholder="es. Smart TV Salotto"
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              backgroundColor: '#050505',
+              border: `1px solid ${oledTheme.colors.border}`,
+              borderRadius: oledTheme.radius.sm,
+              color: '#FFFFFF',
+              fontFamily: FONT_MONO,
+              fontSize: '13px',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+          {onNavigateHome && (
+            <Button
+              variant="secondary"
+              onClick={onNavigateHome}
+              style={{ flex: 1 }}
+            >
+              ANNULLA
+            </Button>
+          )}
+          <Button
+            variant="primary"
+            onClick={handleApprove}
+            loading={approving}
+            disabled={code.length !== 6}
+            style={{ flex: onNavigateHome ? 2 : 1 }}
+          >
+            AUTORIZZA TV
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  // If rendered inside a modal dialog, render only the compact form
+  if (isModal) {
+    return (
+      <div style={{ width: '100%' }}>
+        <p
+          style={{
+            fontFamily: FONT_MONO,
+            fontSize: '12px',
+            color: oledTheme.colors.textSecondary,
+            margin: '0 0 16px 0',
+            lineHeight: 1.4,
+          }}
+        >
+          Inserisci il codice mostrato sullo schermo di KuroTV sulla tua TV per collegarla istantaneamente.
+        </p>
+        {renderForm()}
+      </div>
+    );
+  }
+
+  // Standalone page mode (/pair)
   return (
     <div
       style={{
@@ -100,35 +377,35 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#000000',
-        padding: '20px',
+        padding: '24px 16px',
       }}
     >
-      <div style={{ width: '100%', maxWidth: '480px' }}>
-        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+      <div style={{ width: '100%', maxWidth: '440px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
           <div
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: '52px',
-              height: '52px',
-              borderRadius: '14px',
+              width: '44px',
+              height: '44px',
+              borderRadius: '12px',
               backgroundColor: 'rgba(229, 9, 20, 0.15)',
               border: '1px solid #E50914',
-              marginBottom: '16px',
+              marginBottom: '12px',
             }}
           >
-            <TvIcon size={28} color="#E50914" />
+            <TvIcon size={24} color="#E50914" />
           </div>
           <h1
             style={{
               fontFamily: FONT_MONO,
-              fontSize: '22px',
+              fontSize: '20px',
               fontWeight: 900,
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
               color: '#FFFFFF',
-              margin: '0 0 8px 0',
+              margin: '0 0 6px 0',
             }}
           >
             PAIR ANDROID TV
@@ -136,259 +413,17 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
           <p
             style={{
               fontFamily: FONT_MONO,
-              fontSize: '13px',
+              fontSize: '12px',
               color: oledTheme.colors.textSecondary,
               margin: 0,
             }}
           >
-            Enter the 6-character code shown on your KuroTV TV screen.
+            Inserisci il codice di 6 caratteri mostrato sullo schermo della TV.
           </p>
         </div>
 
-        <Card style={{ backgroundColor: '#0A0A0A', border: `1px solid ${oledTheme.colors.border}` }}>
-          {success ? (
-            <div style={{ textAlign: 'center', padding: '16px 0' }}>
-              <div
-                style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                  border: '1px solid #10B981',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 16px auto',
-                }}
-              >
-                <CheckIcon size={24} color="#10B981" />
-              </div>
-              <h2
-                style={{
-                  fontFamily: FONT_MONO,
-                  fontSize: '18px',
-                  fontWeight: 700,
-                  color: '#FFFFFF',
-                  marginBottom: '8px',
-                }}
-              >
-                TV PAIRED SUCCESSFULLY!
-              </h2>
-              <p
-                style={{
-                  fontFamily: FONT_MONO,
-                  fontSize: '13px',
-                  color: oledTheme.colors.textSecondary,
-                  lineHeight: 1.5,
-                  marginBottom: '24px',
-                }}
-              >
-                Your TV has received its sync credentials and is now linked to your profile. You can return to your TV.
-              </p>
-              {onNavigateHome && (
-                <Button variant="primary" onClick={onNavigateHome} style={{ width: '100%' }}>
-                  RETURN TO DASHBOARD
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {error && (
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                    border: '1px solid #EF4444',
-                    borderRadius: oledTheme.radius.sm,
-                    color: '#EF4444',
-                    fontSize: '13px',
-                    fontFamily: FONT_MONO,
-                  }}
-                >
-                  {error}
-                </div>
-              )}
-
-              {/* Code Input */}
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontFamily: FONT_MONO,
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    color: oledTheme.colors.textSecondary,
-                    marginBottom: '8px',
-                    textAlign: 'center',
-                  }}
-                >
-                  6-CHARACTER TV CODE
-                </label>
-                <input
-                  type="text"
-                  value={code}
-                  onChange={handleCodeChange}
-                  placeholder="e.g. 7K9P2X"
-                  maxLength={6}
-                  autoFocus
-                  style={{
-                    width: '100%',
-                    padding: '14px',
-                    backgroundColor: '#050505',
-                    border: `2px solid ${
-                      code.length === 6 ? oledTheme.colors.primary : oledTheme.colors.border
-                    }`,
-                    borderRadius: oledTheme.radius.md,
-                    color: '#FFFFFF',
-                    fontFamily: FONT_MONO,
-                    fontSize: '24px',
-                    fontWeight: 900,
-                    textAlign: 'center',
-                    letterSpacing: '0.3em',
-                    textTransform: 'uppercase',
-                    outline: 'none',
-                  }}
-                />
-              </div>
-
-              {/* Device Metadata Preview */}
-              {loadingInfo && (
-                <div style={{ textAlign: 'center', color: oledTheme.colors.textMuted, fontSize: '13px' }}>
-                  Verifying TV code...
-                </div>
-              )}
-
-              {pairInfo && (
-                <div
-                  style={{
-                    padding: '12px 16px',
-                    backgroundColor: '#121212',
-                    borderRadius: oledTheme.radius.sm,
-                    border: `1px solid ${oledTheme.colors.border}`,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                    fontSize: '12px',
-                    fontFamily: FONT_MONO,
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: oledTheme.colors.textMuted }}>DEVICE:</span>
-                    <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{pairInfo.deviceName}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: oledTheme.colors.textMuted }}>PLATFORM:</span>
-                    <span style={{ color: '#FFFFFF' }}>{pairInfo.platform}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: oledTheme.colors.textMuted }}>STATUS:</span>
-                    <Badge variant={pairInfo.status === 'pending' ? 'warning' : 'danger'}>
-                      {pairInfo.status}
-                    </Badge>
-                  </div>
-                </div>
-              )}
-
-              {/* Profile Selection */}
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontFamily: FONT_MONO,
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    color: oledTheme.colors.textSecondary,
-                    marginBottom: '8px',
-                  }}
-                >
-                  Assign to Profile
-                </label>
-                <select
-                  value={selectedProfileId}
-                  onChange={(e) => setSelectedProfileId(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 14px',
-                    backgroundColor: '#050505',
-                    border: `1px solid ${oledTheme.colors.border}`,
-                    borderRadius: oledTheme.radius.sm,
-                    color: '#FFFFFF',
-                    fontFamily: FONT_MONO,
-                    fontSize: '14px',
-                    outline: 'none',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {profiles.map((p) => (
-                    <option
-                      key={p.id}
-                      value={p.id}
-                      style={{ backgroundColor: '#121212', color: '#FFFFFF' }}
-                    >
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Device Label */}
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontFamily: FONT_MONO,
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    color: oledTheme.colors.textSecondary,
-                    marginBottom: '8px',
-                  }}
-                >
-                  Device Label (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={deviceLabel}
-                  onChange={(e) => setDeviceLabel(e.target.value)}
-                  placeholder="e.g. Salotto TV"
-                  style={{
-                    width: '100%',
-                    padding: '10px 14px',
-                    backgroundColor: '#050505',
-                    border: `1px solid ${oledTheme.colors.border}`,
-                    borderRadius: oledTheme.radius.sm,
-                    color: '#FFFFFF',
-                    fontFamily: FONT_MONO,
-                    fontSize: '14px',
-                    outline: 'none',
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
-                {onNavigateHome && (
-                  <Button
-                    variant="secondary"
-                    onClick={onNavigateHome}
-                    style={{ flex: 1 }}
-                  >
-                    CANCEL
-                  </Button>
-                )}
-                <Button
-                  variant="primary"
-                  onClick={handleApprove}
-                  loading={approving}
-                  disabled={code.length !== 6}
-                  style={{ flex: onNavigateHome ? 2 : 1 }}
-                >
-                  APPROVE TV PAIRING
-                </Button>
-              </div>
-            </div>
-          )}
+        <Card style={{ backgroundColor: '#0A0A0A', border: `1px solid ${oledTheme.colors.border}`, padding: '20px' }}>
+          {renderForm()}
         </Card>
       </div>
     </div>

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { oledTheme, FONT_MONO } from '../../theme';
-import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Badge } from '../../components/Badge';
 import { Modal } from '../../components/Modal';
@@ -29,7 +28,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
   const [devices, setDevices] = useState<DeviceRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -38,9 +37,12 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
     setError(null);
     try {
       const res = await api.listDevices(activeProfileId || undefined);
-      setDevices(res.devices || []);
+      const list = res.devices || [];
+      // Ensure sorted by last seen (descending)
+      list.sort((a, b) => (b.last_seen_at || b.created_at) - (a.last_seen_at || a.created_at));
+      setDevices(list);
     } catch (err: any) {
-      setError(err?.message || 'Failed to load devices.');
+      setError(err?.message || 'Impossibile caricare i dispositivi.');
     } finally {
       setLoading(false);
     }
@@ -52,18 +54,52 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
 
   const handleRevoke = async (id: string, name: string) => {
     const confirmed = window.confirm(
-      `Revoke device "${name}"? It will be disconnected immediately and its token invalidated.`
+      `Disconnettere "${name}"? La sessione verrà invalidata immediatamente.`
     );
     if (!confirmed) return;
 
-    setRevokingId(id);
+    setActionId(id);
     try {
       await api.revokeDevice(id);
       await fetchDevices();
     } catch (err: any) {
-      alert(`Failed to revoke device: ${err?.message || 'Unknown error'}`);
+      alert(`Errore: ${err?.message || 'Impossibile disconnettere il dispositivo'}`);
     } finally {
-      setRevokingId(null);
+      setActionId(null);
+    }
+  };
+
+  const handlePermanentDelete = async (id: string, name: string) => {
+    const confirmed = window.confirm(
+      `Rimuovere definitivamente "${name}" dalla lista dei dispositivi?`
+    );
+    if (!confirmed) return;
+
+    setActionId(id);
+    try {
+      await api.deleteDevicePermanently(id);
+      await fetchDevices();
+    } catch (err: any) {
+      alert(`Errore: ${err?.message || 'Impossibile rimuovere il dispositivo'}`);
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handlePurgeAllRevoked = async () => {
+    const confirmed = window.confirm(
+      'Rimuovere definitivamente tutte le sessioni disconnesse?'
+    );
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      await api.purgeRevokedDevices(activeProfileId || undefined);
+      await fetchDevices();
+    } catch (err: any) {
+      alert(`Errore: ${err?.message || 'Impossibile rimuovere le sessioni'}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -92,6 +128,8 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
     }
   };
 
+  const hasRevoked = devices.some((d) => !!d.revoked_at);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div
@@ -116,7 +154,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
               textTransform: 'uppercase',
             }}
           >
-            Connected Devices ({devices.length})
+            Dispositivi Connessi ({devices.length})
           </h2>
           <p
             style={{
@@ -126,18 +164,33 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
               margin: 0,
             }}
           >
-            Manage active authorizations for Android TV, KuroTV Mobile, and Web sessions.
+            Gestisci le autorizzazioni per Android TV, KuroTV Mobile e sessioni Web (ordinati per ultimo accesso).
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          {hasRevoked && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handlePurgeAllRevoked}
+              style={{
+                color: '#EF4444',
+                borderColor: 'rgba(239, 68, 68, 0.4)',
+                backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              }}
+            >
+              PULISCI DISCONNESSI
+            </Button>
+          )}
+
           <Button
             variant="secondary"
             size="sm"
             onClick={() => setIsQrModalOpen(true)}
             icon={<QrIcon size={14} />}
           >
-            CONNECT SMARTPHONE
+            COLLEGA SMARTPHONE
           </Button>
 
           <Button
@@ -146,7 +199,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
             onClick={onOpenTvPair}
             icon={<TvIcon size={14} />}
           >
-            PAIR TV
+            AUTORIZZA TV
           </Button>
 
           <Button
@@ -155,7 +208,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
             onClick={fetchDevices}
             loading={loading}
             icon={<RefreshIcon size={14} />}
-            title="Refresh"
+            title="Aggiorna lista"
           />
         </div>
       </div>
@@ -185,7 +238,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
             fontFamily: FONT_MONO,
           }}
         >
-          No devices registered yet. Connect your smartphone or Android TV.
+          Nessun dispositivo registrato finora. Collega uno smartphone o una Android TV.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -203,9 +256,10 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                   backgroundColor: oledTheme.colors.card,
                   border: `1px solid ${oledTheme.colors.border}`,
                   borderRadius: oledTheme.radius.md,
-                  opacity: isRevoked ? 0.5 : 1,
+                  opacity: isRevoked ? 0.6 : 1,
                   gap: '12px',
                   flexWrap: 'wrap',
+                  transition: 'opacity 0.2s ease',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -215,6 +269,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                       height: '40px',
                       borderRadius: oledTheme.radius.sm,
                       backgroundColor: '#171717',
+                      border: `1px solid ${oledTheme.colors.border}`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -236,7 +291,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                         {device.name}
                       </span>
                       <Badge variant={isRevoked ? 'danger' : 'info'}>
-                        {isRevoked ? 'REVOKED' : device.device_type.toUpperCase()}
+                        {isRevoked ? 'DISCONNESSO' : device.device_type.toUpperCase()}
                       </Badge>
                     </div>
                     <div
@@ -247,33 +302,40 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                         marginTop: '4px',
                       }}
                     >
-                      Platform: {device.platform} • Last seen:{' '}
-                      {new Date(device.last_seen_at).toLocaleString()}
+                      Piattaforma: {device.platform} • Ultimo accesso:{' '}
+                      <span style={{ color: isRevoked ? oledTheme.colors.textMuted : '#FFFFFF' }}>
+                        {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : 'N/D'}
+                      </span>
+                      {isRevoked && device.revoked_at && (
+                        <span> • Disconnesso il: {new Date(device.revoked_at).toLocaleString()}</span>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   {!isRevoked ? (
                     <Button
                       variant="danger"
                       size="sm"
-                      loading={revokingId === device.id}
+                      loading={actionId === device.id}
                       onClick={() => handleRevoke(device.id, device.name)}
                       icon={<TrashIcon size={12} />}
+                      title="Disconnetti sessione"
                     >
-                      REVOKE
+                      DISCONNETTI
                     </Button>
                   ) : (
-                    <span
-                      style={{
-                        fontFamily: FONT_MONO,
-                        fontSize: '11px',
-                        color: oledTheme.colors.error,
-                      }}
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      loading={actionId === device.id}
+                      onClick={() => handlePermanentDelete(device.id, device.name)}
+                      icon={<TrashIcon size={12} />}
+                      title="Elimina definitivamente dalla lista"
                     >
-                      Disconnected
-                    </span>
+                      RIMUOVI
+                    </Button>
                   )}
                 </div>
               </div>
@@ -282,40 +344,43 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
         </div>
       )}
 
-      {/* Connect Smartphone Modal with QR Code */}
+      {/* Connect Smartphone Modal with High-Contrast QR Code */}
       <Modal
         isOpen={isQrModalOpen}
         onClose={() => setIsQrModalOpen(false)}
-        title="CONNECT SMARTPHONE"
+        title="COLLEGA SMARTPHONE"
+        maxWidth="460px"
       >
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '18px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
           <p
             style={{
               fontFamily: FONT_MONO,
-              fontSize: '13px',
+              fontSize: '12px',
               color: oledTheme.colors.textSecondary,
               textAlign: 'center',
               margin: 0,
+              lineHeight: 1.5,
             }}
           >
-            Scan this QR code in KuroTV Mobile under Settings &gt; Sync Instance to connect automatically.
+            Inquadra questo QR code dall'app <strong>KuroTV Mobile</strong> su <em>Impostazioni &gt; Sincronizzazione</em> per collegarti all'istante.
           </p>
 
-          <QrCode value={connectUrl} size={200} />
+          <QrCode value={connectUrl} size={210} />
 
-          <div style={{ width: '100%' }}>
+          <div style={{ width: '100%', boxSizing: 'border-box' }}>
             <label
               style={{
                 display: 'block',
                 fontFamily: FONT_MONO,
-                fontSize: '11px',
+                fontSize: '10px',
                 fontWeight: 700,
                 color: oledTheme.colors.textMuted,
-                marginBottom: '6px',
+                marginBottom: '4px',
                 textTransform: 'uppercase',
+                letterSpacing: '0.05em',
               }}
             >
-              Direct Connect Deep Link
+              Oppure copia il Deep Link diretto
             </label>
             <div style={{ display: 'flex', gap: '8px' }}>
               <input
@@ -324,7 +389,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                 value={connectUrl}
                 style={{
                   flex: 1,
-                  padding: '8px 12px',
+                  padding: '8px 10px',
                   backgroundColor: '#050505',
                   border: `1px solid ${oledTheme.colors.border}`,
                   borderRadius: oledTheme.radius.sm,
@@ -332,6 +397,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                   fontFamily: FONT_MONO,
                   fontSize: '11px',
                   outline: 'none',
+                  boxSizing: 'border-box',
                 }}
               />
               <Button
@@ -340,7 +406,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                 onClick={handleCopyConnectUrl}
                 icon={copied ? <CheckIcon size={14} color="#10B981" /> : <CopyIcon size={14} />}
               >
-                {copied ? 'COPIED' : 'COPY'}
+                {copied ? 'COPIATO' : 'COPIA'}
               </Button>
             </div>
           </div>
