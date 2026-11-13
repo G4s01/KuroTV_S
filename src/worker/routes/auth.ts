@@ -21,6 +21,8 @@ authRouter.use("/auth/login", loginLimiter);
 const deviceLoginLimiter = rateLimit({ limit: 10, windowSeconds: 60, prefix: "auth_dev_login" });
 authRouter.use("/device-login", deviceLoginLimiter);
 authRouter.use("/auth/device-login", deviceLoginLimiter);
+authRouter.use("/profiles", deviceLoginLimiter);
+authRouter.use("/auth/profiles", deviceLoginLimiter);
 
 async function handleLogin(c: Context<AppEnv>) {
   let body: any;
@@ -391,3 +393,112 @@ async function handleLogout(c: Context<AppEnv>) {
 
 authRouter.post("/logout", handleLogout);
 authRouter.post("/auth/logout", handleLogout);
+
+// List Profiles with Master Password (for Netflix-style profile selector before login)
+async function handleListProfilesWithPassword(c: Context<AppEnv>) {
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const { password } = body || {};
+  if (!password || typeof password !== "string") {
+    return c.json({ error: "password is required" }, 400);
+  }
+
+  let isAuthenticated = false;
+  if (c.env.SYNC_ADMIN_SECRET && c.env.SYNC_ADMIN_SECRET.trim().length > 0) {
+    isAuthenticated = await timingSafeEqualStrings(password, c.env.SYNC_ADMIN_SECRET);
+  } else {
+    const config = await c.env.DB.prepare(
+      "SELECT master_hash, master_salt, setup_completed FROM instance_config WHERE id = 1"
+    ).first<{ master_hash: string; master_salt: string; setup_completed: number }>();
+
+    if (!config || config.setup_completed !== 1) {
+      return c.json({ error: "Setup not completed" }, 400);
+    }
+    isAuthenticated = await verifyPassword(password, config.master_hash, config.master_salt);
+  }
+
+  if (!isAuthenticated) {
+    return c.json({ error: "Unauthorized", message: "Invalid master password" }, 401);
+  }
+
+  const rows = await c.env.DB.prepare(`
+    SELECT id, name, avatar_color, created_at, updated_at
+    FROM profiles
+    ORDER BY created_at ASC
+  `).all<{
+    id: string;
+    name: string;
+    avatar_color: string;
+    created_at: number;
+    updated_at: number;
+  }>();
+
+  const profiles = (rows.results || []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    avatar_color: row.avatar_color,
+    avatarColor: row.avatar_color,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }));
+
+  return c.json({ ok: true, profiles }, 200);
+}
+
+authRouter.post("/auth/profiles", handleListProfilesWithPassword);
+
+// Switch Active Profile for Connected Device
+async function handleSwitchProfile(c: Context<AppEnv>) {
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const { profileId } = body || {};
+  if (!profileId || typeof profileId !== "string" || profileId.trim().length === 0) {
+    return c.json({ error: "profileId is required" }, 400);
+  }
+
+  const profile = await c.env.DB.prepare(
+    "SELECT id, name, avatar_color, created_at, updated_at FROM profiles WHERE id = ?"
+  )
+    .bind(profileId.trim())
+    .first<{ id: string; name: string; avatar_color: string; created_at: number; updated_at: number }>();
+
+  if (!profile) {
+    return c.json({ error: "Profile not found" }, 404);
+  }
+
+  const deviceId = c.get("deviceId" as any);
+  if (deviceId) {
+    await c.env.DB.prepare("UPDATE devices SET profile_id = ? WHERE id = ?")
+      .bind(profile.id, deviceId)
+      .run();
+  }
+
+  return c.json(
+    {
+      ok: true,
+      profileId: profile.id,
+      profile: {
+        id: profile.id,
+        name: profile.name,
+        avatar_color: profile.avatar_color,
+        avatarColor: profile.avatar_color,
+        created_at: profile.created_at,
+        updated_at: profile.updated_at,
+      },
+    },
+    200
+  );
+}
+
+authRouter.post("/switch-profile", requireAuth, handleSwitchProfile);
+authRouter.post("/auth/switch-profile", requireAuth, handleSwitchProfile);

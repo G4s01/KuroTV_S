@@ -710,6 +710,53 @@ describe("Tier 1: Client SDK & mergeLocalAndRemote (Feature 17, 24-26)", () => {
     expect(DEFAULT_ANISKIP_SETTINGS.enableRecap).toBe(true);
     expect(DEFAULT_ANISKIP_SETTINGS.buttonDuration).toBe(10);
   });
+
+  it("17.13 KuroSyncClient supports listProfilesWithPassword, listProfiles, and switchProfile", async () => {
+    const client = new KuroSyncClient({
+      baseUrl: "https://sync.kurotv.internal",
+      deviceToken: "dev-token-xyz",
+    });
+
+    const calls: { url: string; method: string; body?: any; headers?: any }[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : (input as Request).url;
+      const method = init?.method || "GET";
+      const body = init?.body ? JSON.parse(init.body as string) : undefined;
+      const headers = init?.headers;
+      calls.push({ url, method, body, headers });
+
+      if (url.includes("/api/auth/profiles")) {
+        return new Response(JSON.stringify({ ok: true, profiles: [{ id: "p1", name: "Main", avatarColor: "#E50914" }] }), { status: 200 });
+      }
+      if (url.includes("/api/profiles")) {
+        return new Response(JSON.stringify({ ok: true, profiles: [{ id: "p1", name: "Main", avatarColor: "#E50914" }] }), { status: 200 });
+      }
+      if (url.includes("/api/auth/switch-profile")) {
+        return new Response(JSON.stringify({ ok: true, profileId: "p2", profile: { id: "p2", name: "Kids", avatarColor: "#00E5FF" } }), { status: 200 });
+      }
+      return new Response("{}", { status: 200 });
+    }) as any;
+
+    try {
+      const profsWithPass = await client.listProfilesWithPassword("MySecretPass");
+      expect(profsWithPass).toHaveLength(1);
+      expect(calls[0].url).toBe("https://sync.kurotv.internal/api/auth/profiles");
+      expect(calls[0].body.password).toBe("MySecretPass");
+
+      const profs = await client.listProfiles();
+      expect(profs).toHaveLength(1);
+      expect(calls[1].url).toBe("https://sync.kurotv.internal/api/profiles");
+
+      const switched = await client.switchProfile("p2");
+      expect(switched.ok).toBe(true);
+      expect(switched.profileId).toBe("p2");
+      expect(calls[2].url).toBe("https://sync.kurotv.internal/api/auth/switch-profile");
+      expect(calls[2].body.profileId).toBe("p2");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 function emptyState(): LocalStorageState {

@@ -252,6 +252,21 @@ export interface BackupImportResponse {
   restoredCount: number;
 }
 
+export interface ProfileItem {
+  id: string;
+  name: string;
+  avatarColor: string;
+  avatar_color?: string;
+  created_at?: number;
+  updated_at?: number;
+}
+
+export interface SwitchProfileResponse {
+  ok: boolean;
+  profileId: string;
+  profile: ProfileItem;
+}
+
 // ============================================================================
 // Local Storage & Merge Engine State
 // ============================================================================

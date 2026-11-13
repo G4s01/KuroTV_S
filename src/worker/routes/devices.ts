@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { AppEnv } from "../types";
 import { requireAuth } from "../middleware/auth";
 
@@ -45,6 +45,78 @@ devicesRouter.delete("/devices/revoked", async (c) => {
   }
   return c.json({ ok: true, purgedCount: res.meta.changes }, 200);
 });
+
+// Update device details (custom device name or profile association)
+async function handleUpdateDevice(c: Context<AppEnv>) {
+  const id = c.req.param("id");
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const { name, profileId } = body || {};
+
+  const existing = await c.env.DB.prepare(
+    "SELECT id, profile_id, name, device_type, platform, last_seen_at, created_at, revoked_at FROM devices WHERE id = ?"
+  )
+    .bind(id)
+    .first<{
+      id: string;
+      profile_id: string;
+      name: string;
+      device_type: string;
+      platform: string;
+      last_seen_at: number;
+      created_at: number;
+      revoked_at: number | null;
+    }>();
+
+  if (!existing) {
+    return c.json({ error: "Device not found" }, 404);
+  }
+
+  let newName = existing.name;
+  if (name !== undefined) {
+    if (typeof name !== "string" || name.trim().length === 0) {
+      return c.json({ error: "Device name cannot be empty" }, 400);
+    }
+    newName = name.trim().slice(0, 50);
+  }
+
+  let newProfileId = existing.profile_id;
+  if (profileId !== undefined && typeof profileId === "string" && profileId.trim().length > 0) {
+    const profile = await c.env.DB.prepare("SELECT id FROM profiles WHERE id = ?")
+      .bind(profileId.trim())
+      .first();
+    if (!profile) {
+      return c.json({ error: "Profile not found" }, 404);
+    }
+    newProfileId = profileId.trim();
+  }
+
+  await c.env.DB.prepare(
+    "UPDATE devices SET name = ?, profile_id = ? WHERE id = ?"
+  )
+    .bind(newName, newProfileId, id)
+    .run();
+
+  return c.json(
+    {
+      ok: true,
+      device: {
+        ...existing,
+        name: newName,
+        profile_id: newProfileId,
+      },
+    },
+    200
+  );
+}
+
+devicesRouter.put("/devices/:id", handleUpdateDevice);
+devicesRouter.patch("/devices/:id", handleUpdateDevice);
 
 // Delete or revoke device
 devicesRouter.delete("/devices/:id", async (c) => {

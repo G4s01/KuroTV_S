@@ -16,6 +16,8 @@ import type {
   TokenExchangeRequest,
   TokenExchangeResponse,
   LogoutResponse,
+  ProfileItem,
+  SwitchProfileResponse,
 } from "./types";
 
 /**
@@ -142,6 +144,61 @@ export class KuroSyncClient {
     const data = (await res.json()) as LogoutResponse;
     this.deviceToken = undefined;
     return data;
+  }
+
+  // --------------------------------------------------------------------------
+  // 2c. Netflix-Style Profile Selector & Profile Switcher
+  // --------------------------------------------------------------------------
+  /**
+   * List profiles using master password (for Netflix-style profile selector before login)
+   */
+  async listProfilesWithPassword(password: string): Promise<ProfileItem[]> {
+    const res = await fetch(this.getUrl("/api/auth/profiles"), {
+      method: "POST",
+      headers: this.getHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ password }),
+    });
+
+    if (!res.ok) {
+      await this.handleErrorResponse(res, "List profiles with password");
+    }
+
+    const data = (await res.json()) as { ok: boolean; profiles: ProfileItem[] };
+    return data.profiles || [];
+  }
+
+  /**
+   * List profiles using current authenticated deviceToken
+   */
+  async listProfiles(): Promise<ProfileItem[]> {
+    const res = await fetch(this.getUrl("/api/profiles"), {
+      method: "GET",
+      headers: this.getHeaders(),
+    });
+
+    if (!res.ok) {
+      await this.handleErrorResponse(res, "List profiles");
+    }
+
+    const data = (await res.json()) as { ok: boolean; profiles: ProfileItem[] };
+    return data.profiles || [];
+  }
+
+  /**
+   * Switch the active profile for the currently connected device session
+   */
+  async switchProfile(profileId: string): Promise<SwitchProfileResponse> {
+    const res = await fetch(this.getUrl("/api/auth/switch-profile"), {
+      method: "POST",
+      headers: this.getHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ profileId }),
+    });
+
+    if (!res.ok) {
+      await this.handleErrorResponse(res, "Switch profile");
+    }
+
+    return (await res.json()) as SwitchProfileResponse;
   }
 
   // --------------------------------------------------------------------------

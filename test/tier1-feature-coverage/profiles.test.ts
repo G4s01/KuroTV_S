@@ -352,6 +352,72 @@ describe("Tier 1: Device Listing & Filtering (GET /api/devices)", () => {
     expect(resEmpty.status).toBe(200);
     expect(resEmpty.body.devices.length).toBe(0);
   });
+
+  it("2.3 PUT /api/devices/:id updates device name and associated profile", async () => {
+    const updateRes = await harness.put<{ ok: boolean; device: any }>("/api/devices/dev-p2", {
+      name: "Samsung S24 Ultra",
+      profileId: prof1,
+    });
+
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.ok).toBe(true);
+    expect(updateRes.body.device.name).toBe("Samsung S24 Ultra");
+    expect(updateRes.body.device.profile_id).toBe(prof1);
+
+    const check = await harness.get<{ ok: boolean; devices: any[] }>(`/api/devices?profileId=${prof1}`);
+    expect(check.body.devices.some((d) => d.name === "Samsung S24 Ultra")).toBe(true);
+  });
+
+  it("2.4 PUT /api/devices/:id rejects empty device name (400) and non-existent device (404)", async () => {
+    const resEmpty = await harness.put<{ error: string }>("/api/devices/dev-p2", {
+      name: "   ",
+    });
+    expect(resEmpty.status).toBe(400);
+
+    const res404 = await harness.put<{ error: string }>("/api/devices/non-existent-dev", {
+      name: "Valid Name",
+    });
+    expect(res404.status).toBe(404);
+  });
+
+  it("2.5 POST /api/auth/profiles returns profiles with valid master password and rejects invalid password", async () => {
+    // Setup instance master password
+    const setupHarness = new TestHarness();
+    await setupHarness.post("/api/setup", {
+      masterPassword: "MyMasterPassword123!",
+    });
+
+    const publicHarness = new TestHarness();
+    const wrongRes = await publicHarness.post<{ error: string }>("/api/auth/profiles", {
+      password: "WrongPassword!",
+    });
+    expect(wrongRes.status).toBe(401);
+
+    const validRes = await publicHarness.post<{ ok: boolean; profiles: any[] }>("/api/auth/profiles", {
+      password: "MyMasterPassword123!",
+    });
+    expect(validRes.status).toBe(200);
+    expect(validRes.body.ok).toBe(true);
+    expect(validRes.body.profiles.length).toBeGreaterThan(0);
+    expect(validRes.body.profiles[0].name).toBeDefined();
+    expect(validRes.body.profiles[0].avatarColor).toBeDefined();
+  });
+
+  it("2.6 POST /api/auth/switch-profile switches active profile for connected device session", async () => {
+    const switchRes = await harness.post<{ ok: boolean; profileId: string; profile: any }>("/api/auth/switch-profile", {
+      profileId: prof2,
+    });
+    expect(switchRes.status).toBe(200);
+    expect(switchRes.body.ok).toBe(true);
+    expect(switchRes.body.profileId).toBe(prof2);
+    expect(switchRes.body.profile.name).toBe("Profile Two");
+
+    // Switching to invalid profile returns 404
+    const notFoundRes = await harness.post<{ error: string }>("/api/auth/switch-profile", {
+      profileId: "non-existent-profile",
+    });
+    expect(notFoundRes.status).toBe(404);
+  });
 });
 
 describe("Tier 1: Public TV Pairing Preview Info (GET /api/pair/info)", () => {

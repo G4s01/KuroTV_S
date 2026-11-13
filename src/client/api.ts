@@ -383,6 +383,19 @@ export class KuroSyncApi {
     });
   }
 
+  public async updateDevice(
+    id: string,
+    data: { name?: string; profileId?: string }
+  ): Promise<{ ok: boolean; device: DeviceRecord }> {
+    return this.request<{ ok: boolean; device: DeviceRecord }>(
+      `/api/devices/${encodeURIComponent(id)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
   /**
    * Delta Sync & Library
    */

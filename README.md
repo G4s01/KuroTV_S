@@ -86,6 +86,8 @@ KuroTV_S is carefully engineered to operate well below Cloudflare's Free tier th
 | `POST` | `/api/setup` | First-run setup wizard (locked once completed) | No |
 | `POST` | `/api/auth/login` | Master password authentication (returns session token) | No (Rate-limited) |
 | `POST` | `/api/auth/device-login` | Direct device login with profile binding | No (Rate-limited) |
+| `POST` | `/api/auth/profiles` | List profiles with Master Password (for Netflix-style initial selector) | No (Rate-limited) |
+| `POST` | `/api/auth/switch-profile` | Switch active profile for connected device session | Bearer Token |
 | `POST` | `/api/auth/qr-token` | Generate ephemeral single-use QR token (5m TTL) | Bearer Token |
 | `POST` | `/api/auth/exchange` | Atomically exchange single-use QR token for device token | No |
 | `POST` | `/api/auth/logout` | Revoke session and invalidate device token | Bearer Token |
@@ -95,7 +97,10 @@ KuroTV_S is carefully engineered to operate well below Cloudflare's Free tier th
 | `POST` | `/api/pair/approve` | Authorize pairing code and issue device token | Bearer Token |
 | `GET` | `/api/profiles` | List instance viewing profiles | Bearer Token |
 | `POST` | `/api/profiles` | Create new viewing profile | Bearer Token |
+| `PUT` | `/api/profiles/:id` | Update profile name and avatar color | Bearer Token |
+| `DELETE`| `/api/profiles/:id` | Purge viewing profile and associated state | Bearer Token |
 | `GET` | `/api/devices` | List connected devices (ordered by last seen) | Bearer Token |
+| `PUT` | `/api/devices/:id` | Update device name or profile association | Bearer Token |
 | `DELETE`| `/api/devices/:id` | Revoke device or permanently delete disconnected device | Bearer Token |
 | `DELETE`| `/api/devices/revoked` | Bulk purge all disconnected/revoked devices | Bearer Token |
 | `GET` | `/api/sync/pull` | Delta sync pull (`?since=<epochMs>`) | Bearer Token |

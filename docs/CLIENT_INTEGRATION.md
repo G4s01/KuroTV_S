@@ -329,7 +329,70 @@ When logging out from the KuroTV Mobile app, Android TV, or Web Console, the ses
 
 ---
 
-## 8. Smart "IN PARI" (Caught-Up) Sync Flow
+## 8. Netflix-Style Profile Selector & Profile Switcher
+
+KuroTV_S provides native endpoints designed specifically to power a **Netflix-style Profile Selection UI** (displaying avatar colors, names, and IDs) both **prior to login** and **in-app on the fly**:
+
+### 1. Pre-Login Profile Selector (Master Password Flow)
+When the user connects via Master Password rather than QR code:
+1. User enters the backend URL and Master Password.
+2. The client calls:
+   ```typescript
+   const profiles = await syncClient.listProfilesWithPassword(masterPassword);
+   ```
+   *(Under the hood: `POST /api/auth/profiles` with `{ password }`)*
+3. The app renders a grid of profiles with their respective `avatarColor` (e.g. `#E50914`, `#00E5FF`, `#10B981`) and names.
+4. When the user taps a profile:
+   ```typescript
+   const response = await syncClient.loginDevice({
+     password: masterPassword,
+     profileId: selectedProfile.id,
+     deviceName: "Google Pixel 8 Pro", // Custom device name
+     deviceType: "mobile",
+     platform: "android",
+   });
+   mmkv.set("sync.device_token", response.deviceToken);
+   mmkv.set("sync.profile_id", response.profile.id);
+   ```
+
+### 2. In-App Profile Switcher (Authenticated Session)
+A connected mobile or TV device can switch profiles dynamically at any moment without re-authenticating or re-pairing:
+```typescript
+// 1. Fetch available profiles for current instance:
+const profiles = await syncClient.listProfiles(); // GET /api/profiles
+
+// 2. User taps another profile -> switch device binding on backend:
+const result = await syncClient.switchProfile(newProfileId); // POST /api/auth/switch-profile
+
+// 3. Update local MMKV storage and pull new profile deltas:
+mmkv.set("sync.profile_id", result.profileId);
+await syncClient.pullDelta(0); // Full pull for newly active profile
+```
+
+---
+
+## 9. Custom Device Naming & Web Administration
+
+### 1. Sending Custom Device Names from Mobile App
+When logging in (`loginDevice`) or scanning QR (`exchangeToken`), the app can pass a friendly hardware name:
+```typescript
+await syncClient.exchangeToken({
+  token: qrToken,
+  deviceName: "Xiaomi 13T Pro", // e.g. DeviceInfo.getModel()
+  deviceType: "mobile",
+  platform: "android",
+});
+```
+
+### 2. Renaming Devices from Web Console (`PUT /api/devices/:id`)
+Administrators can rename any device directly from the OLED Web Console under **Dispositivi**:
+- Click **MODIFICA** on any device card.
+- Enter the custom label (e.g. "SAMSUNG S24 DI MARCO", "TV CAMERA LETTO").
+- The change is saved instantly via `PUT /api/devices/:id` (`{ name: string }`).
+
+---
+
+## 10. Smart "IN PARI" (Caught-Up) Sync Flow
 
 In KuroTV, an anime marked as **"IN PARI"** (`isCaughtUp = true`) indicates that the user has watched the most recently released episode of an ongoing simulcast series and is waiting for new episodes to air.
 
@@ -347,7 +410,7 @@ When synchronizing Continue Watching across devices, `mergeLocalAndRemote()` pre
 
 ---
 
-## 9. Zero-Dependency Client Initialization Example
+## 11. Zero-Dependency Client Initialization Example
 
 ```typescript
 import { KuroSyncClient, mergeLocalAndRemote, type LocalStorageState } from "@kurosync/sync-client";

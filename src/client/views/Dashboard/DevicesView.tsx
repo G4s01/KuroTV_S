@@ -42,6 +42,34 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
   const modalOpenedAtRef = useRef<number>(0);
   const initialDeviceIdsRef = useRef<Set<string>>(new Set());
 
+  // Edit Device Name Modal State
+  const [editingDevice, setEditingDevice] = useState<DeviceRecord | null>(null);
+  const [editDeviceName, setEditDeviceName] = useState('');
+  const [savingDevice, setSavingDevice] = useState(false);
+  const [editDeviceError, setEditDeviceError] = useState<string | null>(null);
+
+  const handleOpenEditDevice = (device: DeviceRecord) => {
+    setEditingDevice(device);
+    setEditDeviceName(device.name);
+    setEditDeviceError(null);
+  };
+
+  const handleSaveDeviceName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDevice || !editDeviceName.trim()) return;
+    setSavingDevice(true);
+    setEditDeviceError(null);
+    try {
+      await api.updateDevice(editingDevice.id, { name: editDeviceName.trim() });
+      await fetchDevices();
+      setEditingDevice(null);
+    } catch (err: any) {
+      setEditDeviceError(err?.message || 'IMPOSSIBILE RINOMINARE IL DISPOSITIVO.');
+    } finally {
+      setSavingDevice(false);
+    }
+  };
+
   // Integrated UI Confirmation Dialog (replaces browser confirm)
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -470,6 +498,14 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => handleOpenEditDevice(device)}
+                    title="Rinomina dispositivo"
+                  >
+                    MODIFICA
+                  </Button>
                   {!isRevoked ? (
                     <Button
                       variant="danger"
@@ -706,6 +742,90 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
             </>
           )}
         </div>
+      </Modal>
+
+      {/* Edit Device Name Modal */}
+      <Modal
+        isOpen={!!editingDevice}
+        onClose={() => setEditingDevice(null)}
+        title="MODIFICA DISPOSITIVO"
+        maxWidth="440px"
+      >
+        <form onSubmit={handleSaveDeviceName} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {editDeviceError && (
+            <div
+              style={{
+                padding: '8px 12px',
+                backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid #EF4444',
+                borderRadius: oledTheme.radius.sm,
+                color: '#EF4444',
+                fontFamily: FONT_MONO,
+                fontSize: '12px',
+              }}
+            >
+              {editDeviceError}
+            </div>
+          )}
+
+          <div>
+            <label
+              style={{
+                display: 'block',
+                fontFamily: FONT_MONO,
+                fontSize: '11px',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                color: oledTheme.colors.textSecondary,
+                marginBottom: '8px',
+              }}
+            >
+              NOME DISPOSITIVO
+            </label>
+            <input
+              type="text"
+              value={editDeviceName}
+              onChange={(e) => setEditDeviceName(e.target.value)}
+              placeholder="ES. PIXEL 8 PRO, TV SALOTTO"
+              maxLength={50}
+              required
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                backgroundColor: '#121212',
+                border: `1px solid ${oledTheme.colors.border}`,
+                borderRadius: oledTheme.radius.sm,
+                color: '#FFFFFF',
+                fontFamily: FONT_MONO,
+                fontSize: '13px',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setEditingDevice(null)}
+              disabled={savingDevice}
+            >
+              ANNULLA
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={savingDevice}
+              disabled={!editDeviceName.trim()}
+            >
+              SALVA
+            </Button>
+          </div>
+        </form>
       </Modal>
 
       {/* Integrated In-UI Confirmation Modal */}
