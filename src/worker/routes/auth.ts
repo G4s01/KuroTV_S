@@ -276,12 +276,14 @@ async function handleExchange(c: Context<AppEnv>) {
   }
 
   const now = Date.now();
+  const upperInput = rawInputToken.toUpperCase();
+  const lowerInput = rawInputToken.toLowerCase();
 
   // 1. Look up in pairing_codes table (strictly single-use ephemeral QR codes and pairing codes)
   const record = await c.env.DB.prepare(
-    "SELECT * FROM pairing_codes WHERE code = ?"
+    "SELECT * FROM pairing_codes WHERE code = ? OR code = ? OR code = ? OR LOWER(code) = ?"
   )
-    .bind(rawInputToken)
+    .bind(rawInputToken, upperInput, lowerInput, lowerInput)
     .first<{
       code: string;
       pair_secret_hash: string;
@@ -316,7 +318,7 @@ async function handleExchange(c: Context<AppEnv>) {
   const consumeRes = await c.env.DB.prepare(
     "UPDATE pairing_codes SET status = 'consumed' WHERE code = ? AND status = 'approved'"
   )
-    .bind(rawInputToken)
+    .bind(record.code)
     .run();
 
   const rowsChanged = consumeRes.meta?.changes ?? (consumeRes as any).changes ?? 1;

@@ -288,7 +288,7 @@ export class KuroSyncApi {
    */
   public async getPairInfo(code: string): Promise<PairInfoResponse> {
     return this.request<PairInfoResponse>(
-      `/api/pair/info?code=${encodeURIComponent(code.trim().toUpperCase())}`
+      `/api/pair/info?code=${encodeURIComponent(code.trim())}`
     );
   }
 

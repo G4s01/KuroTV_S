@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { oledTheme, FONT_MONO } from '../../theme';
 import { Button } from '../../components/Button';
 import { Badge } from '../../components/Badge';
@@ -39,6 +39,8 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
   const [copied, setCopied] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [loginSuccess, setLoginSuccess] = useState(false);
+  const modalOpenedAtRef = useRef<number>(0);
+  const initialDeviceIdsRef = useRef<Set<string>>(new Set());
 
   // Integrated UI Confirmation Dialog (replaces browser confirm)
   const [confirmModal, setConfirmModal] = useState<{
@@ -93,6 +95,8 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
   useEffect(() => {
     if (isQrModalOpen) {
       setLoginSuccess(false);
+      modalOpenedAtRef.current = Date.now();
+      initialDeviceIdsRef.current = new Set(devices.map((d) => d.id));
       generateQrToken();
     } else {
       setQrToken(null);
@@ -117,18 +121,49 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
     return () => clearInterval(interval);
   }, [qrExpiresAt]);
 
-  // Auto-close polling: detects when device exchanges the QR token
+  // Auto-close polling: detects when device exchanges the QR token (dual-check)
   useEffect(() => {
     if (!isQrModalOpen || !qrToken || loginSuccess) return;
 
     let isSubscribed = true;
     const pollInterval = setInterval(async () => {
       try {
-        const info = await api.getPairInfo(qrToken);
-        if (!isSubscribed) return;
-        if (info.status === 'consumed') {
+        let detected = false;
+
+        // 1. Primary check: Ephemeral QR token status query
+        try {
+          const info = await api.getPairInfo(qrToken);
+          if (info && info.status === 'consumed') {
+            detected = true;
+          }
+        } catch {
+          // Token query fallback ignore
+        }
+
+        // 2. Secondary check: Direct devices listing check
+        if (!detected) {
+          try {
+            const devRes = await api.listDevices(activeProfileId || undefined);
+            if (devRes && Array.isArray(devRes.devices)) {
+              const hasNewDevice = devRes.devices.some(
+                (d) =>
+                  !initialDeviceIdsRef.current.has(d.id) &&
+                  !d.revoked_at &&
+                  (d.created_at >= modalOpenedAtRef.current - 3000 ||
+                    (d.last_seen_at && d.last_seen_at >= modalOpenedAtRef.current - 3000))
+              );
+              if (hasNewDevice) {
+                detected = true;
+              }
+            }
+          } catch {
+            // Devices check ignore
+          }
+        }
+
+        if (detected && isSubscribed) {
           setLoginSuccess(true);
-          await fetchDevices();
+          fetchDevices().catch(() => {});
           setTimeout(() => {
             if (isSubscribed) {
               setIsQrModalOpen(false);
@@ -137,15 +172,15 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
           }, 1200);
         }
       } catch {
-        // Polling ignore
+        // Polling loop ignore
       }
-    }, 1500);
+    }, 2200);
 
     return () => {
       isSubscribed = false;
       clearInterval(pollInterval);
     };
-  }, [isQrModalOpen, qrToken, loginSuccess]);
+  }, [isQrModalOpen, qrToken, loginSuccess, activeProfileId]);
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);

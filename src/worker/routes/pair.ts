@@ -103,13 +103,16 @@ pairRouter.get("/pair/info", async (c) => {
     return c.json({ error: "code query parameter is required" }, 400);
   }
 
-  const normalized = code.trim().toUpperCase();
+  const raw = code.trim();
+  const upper = raw.toUpperCase();
+  const lower = raw.toLowerCase();
+
   const record = await c.env.DB.prepare(`
     SELECT code, device_name, device_type, platform, status, expires_at
     FROM pairing_codes
-    WHERE code = ? OR code = ?
+    WHERE code = ? OR code = ? OR code = ? OR LOWER(code) = ?
   `)
-    .bind(normalized, code.trim())
+    .bind(raw, upper, lower, lower)
     .first<{
       code: string;
       device_name: string;
