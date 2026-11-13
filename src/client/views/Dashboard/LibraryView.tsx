@@ -43,7 +43,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
     setLoading(true);
     setError(null);
     try {
-      const data = await api.pullLibrary(0);
+      const data = await api.pullLibrary(0, activeProfileId || undefined);
       setContinueWatching(data.deltas.continueWatching || []);
       setFavorites(data.deltas.favorites || []);
       setWatchHistory(data.deltas.watchHistory || []);
@@ -79,7 +79,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
         setDeletingKey(key);
         setError(null);
         try {
-          await api.deleteLibraryItem(type, key);
+          await api.deleteLibraryItem(type, key, activeProfileId || undefined);
           if (type === 'continue_watching') {
             setContinueWatching((prev) => prev.filter((item) => item.animeId !== key));
           } else if (type === 'favorite') {

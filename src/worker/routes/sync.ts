@@ -189,12 +189,21 @@ syncRouter.get("/sync/pull", async (c) => {
 });
 
 syncRouter.post("/sync/push", async (c) => {
-  const profileId = c.get("profileId");
+  let profileId = c.get("profileId");
   let body: any;
   try {
     body = await c.req.json();
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  if (c.get("deviceType") === "web" && body?.profileId && typeof body.profileId === "string") {
+    const validProfile = await c.env.DB.prepare("SELECT id FROM profiles WHERE id = ?")
+      .bind(body.profileId.trim())
+      .first<{ id: string }>();
+    if (validProfile) {
+      profileId = validProfile.id;
+    }
   }
 
   const now = Date.now();

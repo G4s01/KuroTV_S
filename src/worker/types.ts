@@ -9,6 +9,7 @@ export type AppBindings = Env & {
 export type AppVariables = {
   profileId?: string;
   deviceId?: string;
+  deviceType?: string;
 };
 
 export type AppEnv = {

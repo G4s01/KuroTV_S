@@ -207,6 +207,10 @@ export class KuroSyncApi {
       headers.set('Authorization', `Bearer ${this.token}`);
     }
 
+    if (this.activeProfileId && !headers.has('X-Profile-Id')) {
+      headers.set('X-Profile-Id', this.activeProfileId);
+    }
+
     if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
@@ -399,8 +403,12 @@ export class KuroSyncApi {
   /**
    * Delta Sync & Library
    */
-  public async pullLibrary(since: number = 0): Promise<PullLibraryResponse> {
-    return this.request<PullLibraryResponse>(`/api/sync/pull?since=${since}`);
+  public async pullLibrary(since: number = 0, profileId?: string): Promise<PullLibraryResponse> {
+    const prof = profileId || this.activeProfileId;
+    const url = prof
+      ? `/api/sync/pull?since=${since}&profileId=${encodeURIComponent(prof)}`
+      : `/api/sync/pull?since=${since}`;
+    return this.request<PullLibraryResponse>(url);
   }
 
   public async pushDelta(payload: {
@@ -411,15 +419,22 @@ export class KuroSyncApi {
     sharedSettings?: Record<string, any>;
     searchHistory?: any[];
     deletions?: Array<{ type: string; key: string; deletedAt?: number }>;
+    profileId?: string;
   }): Promise<{ ok: boolean; serverTime: number; appliedCount: number }> {
+    const prof = payload.profileId || this.activeProfileId;
     return this.request<{ ok: boolean; serverTime: number; appliedCount: number }>('/api/sync/push', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, profileId: prof || undefined }),
     });
   }
 
-  public async deleteLibraryItem(type: 'continue_watching' | 'favorite' | 'watch_history', key: string): Promise<void> {
+  public async deleteLibraryItem(
+    type: 'continue_watching' | 'favorite' | 'watch_history',
+    key: string,
+    profileId?: string
+  ): Promise<void> {
     await this.pushDelta({
+      profileId: profileId || this.activeProfileId || undefined,
       deletions: [{ type, key, deletedAt: Date.now() }],
     });
   }
@@ -427,8 +442,11 @@ export class KuroSyncApi {
   /**
    * Backup & Restore
    */
-  public async exportBackup(): Promise<any> {
-    return this.request<any>('/api/sync/export');
+  public async exportBackup(profileId?: string): Promise<any> {
+    const url = profileId
+      ? `/api/sync/export?profileId=${encodeURIComponent(profileId)}`
+      : '/api/sync/export';
+    return this.request<any>(url);
   }
 
   public async importBackup(payload: any): Promise<{ ok: boolean; message: string; counts?: any }> {

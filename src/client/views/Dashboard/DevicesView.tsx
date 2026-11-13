@@ -192,12 +192,6 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
         if (detected && isSubscribed) {
           setLoginSuccess(true);
           fetchDevices().catch(() => {});
-          setTimeout(() => {
-            if (isSubscribed) {
-              setIsQrModalOpen(false);
-              setLoginSuccess(false);
-            }
-          }, 1200);
         }
       } catch {
         // Polling loop ignore
@@ -209,6 +203,16 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
       clearInterval(pollInterval);
     };
   }, [isQrModalOpen, qrToken, loginSuccess, activeProfileId]);
+
+  // Auto-close modal after successful QR login
+  useEffect(() => {
+    if (!loginSuccess) return;
+    const timer = setTimeout(() => {
+      setIsQrModalOpen(false);
+      setLoginSuccess(false);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [loginSuccess]);
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -670,7 +674,10 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
       {/* Connect Smartphone Modal with Ephemeral Single-Use QR Code */}
       <Modal
         isOpen={isQrModalOpen}
-        onClose={() => setIsQrModalOpen(false)}
+        onClose={() => {
+          setIsQrModalOpen(false);
+          setLoginSuccess(false);
+        }}
         title="COLLEGA SMARTPHONE"
         maxWidth="460px"
       >

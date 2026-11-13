@@ -9,11 +9,23 @@ import { ProfilesView } from './views/Dashboard/ProfilesView';
 import { DevicesView } from './views/Dashboard/DevicesView';
 import { BackupView } from './views/Dashboard/BackupView';
 import { Modal } from './components/Modal';
+import { Button } from './components/Button';
 import {
   api,
   type HealthResponse,
   type ProfileRecord,
 } from './api';
+
+const AVATAR_COLORS = [
+  '#E50914',
+  '#3B82F6',
+  '#10B981',
+  '#F59E0B',
+  '#8B5CF6',
+  '#EC4899',
+  '#14B8A6',
+  '#64748B',
+];
 
 export type DashboardTab = 'library' | 'profiles' | 'devices' | 'backup';
 
@@ -30,6 +42,11 @@ export const App: React.FC = () => {
   const [pairCodeParam, setPairCodeParam] = useState<string>('');
   const [isTvPairModalOpen, setIsTvPairModalOpen] = useState(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [isCreateProfileModalOpen, setIsCreateProfileModalOpen] = useState(false);
+  const [newProfileName, setNewProfileName] = useState('');
+  const [newProfileColor, setNewProfileColor] = useState('#E50914');
+  const [creatingProfile, setCreatingProfile] = useState(false);
+  const [createProfileError, setCreateProfileError] = useState<string | null>(null);
 
   // Parse path and query params on mount & on popstate
   const updateRouteFromLocation = useCallback(() => {
@@ -103,6 +120,26 @@ export const App: React.FC = () => {
   const handleSelectProfile = (id: string) => {
     api.setActiveProfileId(id);
     setActiveProfileId(id);
+  };
+
+  const handleCreateProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProfileName.trim()) return;
+    setCreatingProfile(true);
+    setCreateProfileError(null);
+    try {
+      const res = await api.createProfile(newProfileName.trim(), newProfileColor);
+      await loadProfiles();
+      setIsCreateProfileModalOpen(false);
+      setNewProfileName('');
+      if (res?.profile?.id) {
+        handleSelectProfile(res.profile.id);
+      }
+    } catch (err: any) {
+      setCreateProfileError(err?.message || 'Impossibile creare il profilo.');
+    } finally {
+      setCreatingProfile(false);
+    }
   };
 
   const handleLogout = () => {
@@ -204,6 +241,12 @@ export const App: React.FC = () => {
         profiles={profiles}
         activeProfileId={activeProfileId}
         onSelectProfile={handleSelectProfile}
+        onOpenCreateProfile={() => {
+          setNewProfileName('');
+          setNewProfileColor('#E50914');
+          setCreateProfileError(null);
+          setIsCreateProfileModalOpen(true);
+        }}
         onOpenTvPair={() => setIsTvPairModalOpen(true)}
         onOpenBackup={() => setIsBackupModalOpen(true)}
         onLogout={handleLogout}
@@ -373,6 +416,129 @@ export const App: React.FC = () => {
         maxWidth="700px"
       >
         <BackupView onRestoreSuccess={loadProfiles} />
+      </Modal>
+
+      {/* Create Profile Quick Modal */}
+      <Modal
+        isOpen={isCreateProfileModalOpen}
+        onClose={() => setIsCreateProfileModalOpen(false)}
+        title="CREA NUOVO PROFILO"
+        maxWidth="440px"
+      >
+        <form
+          onSubmit={handleCreateProfileSubmit}
+          style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+        >
+          {createProfileError && (
+            <div
+              style={{
+                padding: '10px 12px',
+                backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid #EF4444',
+                borderRadius: oledTheme.radius.sm,
+                color: '#EF4444',
+                fontSize: '12px',
+                fontFamily: FONT_MONO,
+              }}
+            >
+              {createProfileError}
+            </div>
+          )}
+
+          <div>
+            <label
+              style={{
+                display: 'block',
+                fontFamily: FONT_MONO,
+                fontSize: '11px',
+                fontWeight: 700,
+                color: oledTheme.colors.textSecondary,
+                marginBottom: '6px',
+                textTransform: 'uppercase',
+              }}
+            >
+              NOME PROFILO
+            </label>
+            <input
+              type="text"
+              value={newProfileName}
+              onChange={(e) => setNewProfileName(e.target.value)}
+              placeholder="ES. CAMERA, OSPITI, SALOTTO..."
+              required
+              autoFocus
+              maxLength={30}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                backgroundColor: '#050505',
+                border: `1px solid ${oledTheme.colors.border}`,
+                borderRadius: oledTheme.radius.sm,
+                color: '#FFFFFF',
+                fontFamily: FONT_MONO,
+                fontSize: '13px',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          <div>
+            <label
+              style={{
+                display: 'block',
+                fontFamily: FONT_MONO,
+                fontSize: '11px',
+                fontWeight: 700,
+                color: oledTheme.colors.textSecondary,
+                marginBottom: '8px',
+                textTransform: 'uppercase',
+              }}
+            >
+              COLORE AVATAR
+            </label>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {AVATAR_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setNewProfileColor(c)}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    backgroundColor: c,
+                    border:
+                      newProfileColor === c ? '2px solid #FFFFFF' : '2px solid transparent',
+                    boxShadow:
+                      newProfileColor === c ? '0 0 8px rgba(255,255,255,0.4)' : 'none',
+                    cursor: 'pointer',
+                    transition: 'transform 0.1s ease',
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '8px',
+              marginTop: '12px',
+            }}
+          >
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsCreateProfileModalOpen(false)}
+            >
+              ANNULLA
+            </Button>
+            <Button type="submit" variant="primary" loading={creatingProfile}>
+              CREA PROFILO
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

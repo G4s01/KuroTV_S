@@ -29,10 +29,10 @@ export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const now = Date.now();
 
   const device = await c.env.DB.prepare(
-    "SELECT id, profile_id, revoked_at FROM devices WHERE token_hash = ?"
+    "SELECT id, profile_id, device_type, revoked_at FROM devices WHERE token_hash = ?"
   )
     .bind(tokenHash)
-    .first<{ id: string; profile_id: string; revoked_at: number | null }>();
+    .first<{ id: string; profile_id: string; device_type: string; revoked_at: number | null }>();
 
   if (!device || device.revoked_at !== null) {
     return c.json(
@@ -57,8 +57,20 @@ export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
       .run();
   }
 
-  c.set("profileId", device.profile_id);
+  let effectiveProfileId = device.profile_id;
+  const requestedProfileId = c.req.header("X-Profile-Id") || c.req.query("profileId");
+  if (requestedProfileId && device.device_type === "web") {
+    const validProfile = await c.env.DB.prepare("SELECT id FROM profiles WHERE id = ?")
+      .bind(requestedProfileId.trim())
+      .first<{ id: string }>();
+    if (validProfile) {
+      effectiveProfileId = validProfile.id;
+    }
+  }
+
+  c.set("profileId", effectiveProfileId);
   c.set("deviceId", device.id);
+  c.set("deviceType", device.device_type);
 
   await next();
 };
