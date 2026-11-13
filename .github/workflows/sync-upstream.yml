@@ -1,0 +1,47 @@
+# Sync fork with upstream KuroTV_S repository.
+# Runs daily at 04:00 UTC on forks only.
+# After merging upstream changes, the push triggers deploy.yml automatically.
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: "0 4 * * *" # Daily at 04:00 UTC
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  sync:
+    # Only run on forks, never on the upstream repo itself
+    if: github.repository != 'G4s01/KuroTV_S'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync with upstream
+        run: |
+          git remote add upstream https://github.com/G4s01/KuroTV_S.git
+          git fetch upstream main
+          
+          # Check if there are new commits
+          LOCAL=$(git rev-parse HEAD)
+          UPSTREAM=$(git rev-parse upstream/main)
+          
+          if [ "$LOCAL" = "$UPSTREAM" ]; then
+            echo "✅ Already up to date with upstream."
+            exit 0
+          fi
+          
+          echo "🔄 New upstream commits detected. Merging..."
+          git merge upstream/main --no-edit
+          git push origin main
+          echo "✅ Fork synced successfully."

@@ -110,6 +110,31 @@ KuroTV_S is carefully engineered to operate well below Cloudflare's Free tier th
 
 ---
 
+## 🔄 Fork & Auto-Deploy
+
+Fork this repository to host your own KuroTV_S instance. **Updates from upstream are synced and deployed automatically** — zero maintenance required.
+
+### Setup (one-time, ~2 minutes)
+
+1. **Fork** this repository on GitHub.
+2. **Connect to Cloudflare**: Go to [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages** → **Create** → **Connect to Git**, select your forked repository, and deploy. Cloudflare will automatically build and deploy on every push to `main`.
+3. **Enable Actions** on your fork: go to the **Actions** tab and click _"I understand my workflows, go ahead and enable them"_. This enables the automatic sync with upstream — no secrets or tokens required.
+
+### How it works
+
+```mermaid
+flowchart LR
+    A["G4s01/KuroTV_S\n(upstream)"] -->|"Sync Upstream\n(daily cron)"| B["Your Fork\n(GitHub)"]
+    B -->|"push to main"| C["Cloudflare\n(auto build & deploy)"]
+```
+
+- **Sync Upstream** (GitHub Actions): Runs daily at 04:00 UTC on your fork, fetches and merges new commits from upstream. Can also be triggered manually from the Actions tab.
+- **Cloudflare Git Integration**: Detects every push to `main` and automatically builds and deploys your Worker — no API tokens or CI secrets needed.
+
+> **First deploy**: The D1 database (`kurosync-db`) is auto-provisioned on your Cloudflare account. The backend's `ensureSchema()` creates all tables and indexes on first run.
+
+---
+
 ## 📦 Client SDK Usage (`@kurosync/sync-client`)
 
 Install or link `@kurosync/sync-client` into your React Native or Web application:
