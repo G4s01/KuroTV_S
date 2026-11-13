@@ -312,6 +312,8 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
   };
 
   const hasRevoked = devices.some((d) => !!d.revoked_at);
+  const activeDevices = devices.filter((d) => !d.revoked_at);
+  const revokedDevices = devices.filter((d) => !!d.revoked_at);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -425,88 +427,101 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
           Nessun dispositivo registrato finora. Collega uno smartphone o una Android TV.
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {devices.map((device) => {
-            const isRevoked = !!device.revoked_at;
-
-            return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Active / Connected Devices */}
+          {activeDevices.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div
-                key={device.id}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '14px 18px',
-                  backgroundColor: oledTheme.colors.card,
-                  border: `1px solid ${oledTheme.colors.border}`,
-                  borderRadius: oledTheme.radius.md,
-                  opacity: isRevoked ? 0.6 : 1,
-                  gap: '12px',
-                  flexWrap: 'wrap',
-                  transition: 'opacity 0.2s ease',
+                  gap: '8px',
+                  fontFamily: FONT_MONO,
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#10B981',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  marginBottom: '2px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <div
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: oledTheme.radius.sm,
-                      backgroundColor: '#171717',
-                      border: `1px solid ${oledTheme.colors.border}`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {getDeviceIcon(device.device_type)}
-                  </div>
-
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span
-                        style={{
-                          fontFamily: FONT_MONO,
-                          fontWeight: 700,
-                          fontSize: '14px',
-                          color: '#FFFFFF',
-                        }}
-                      >
-                        {device.name}
-                      </span>
-                      <Badge variant={isRevoked ? 'danger' : 'info'}>
-                        {isRevoked ? 'DISCONNESSO' : device.device_type.toUpperCase()}
-                      </Badge>
-                    </div>
+                <div style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#10B981' }} />
+                <span>DISPOSITIVI CONNESSI ({activeDevices.length})</span>
+              </div>
+              {activeDevices.map((device) => (
+                <div
+                  key={device.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '14px 18px',
+                    backgroundColor: oledTheme.colors.card,
+                    border: `1px solid ${oledTheme.colors.border}`,
+                    borderRadius: oledTheme.radius.md,
+                    gap: '12px',
+                    flexWrap: 'wrap',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                     <div
                       style={{
-                        fontFamily: FONT_MONO,
-                        fontSize: '11px',
-                        color: oledTheme.colors.textMuted,
-                        marginTop: '4px',
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: oledTheme.radius.sm,
+                        backgroundColor: '#171717',
+                        border: `1px solid ${oledTheme.colors.border}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       }}
                     >
-                      Piattaforma: {device.platform} • Ultimo accesso:{' '}
-                      <span style={{ color: isRevoked ? oledTheme.colors.textMuted : '#FFFFFF' }}>
-                        {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : 'N/D'}
-                      </span>
-                      {isRevoked && device.revoked_at && (
-                        <span> • Disconnesso il: {new Date(device.revoked_at).toLocaleString()}</span>
-                      )}
+                      {getDeviceIcon(device.device_type)}
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span
+                          style={{
+                            fontFamily: FONT_MONO,
+                            fontWeight: 700,
+                            fontSize: '14px',
+                            color: '#FFFFFF',
+                          }}
+                        >
+                          {device.name}
+                        </span>
+                        <Badge variant="info">
+                          {device.device_type.toUpperCase()}
+                        </Badge>
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: FONT_MONO,
+                          fontSize: '11px',
+                          color: oledTheme.colors.textMuted,
+                          marginTop: '4px',
+                        }}
+                      >
+                        Piattaforma: {device.platform} • Ultimo accesso:{' '}
+                        <span style={{ color: '#FFFFFF' }}>
+                          {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : 'N/D'}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handleOpenEditDevice(device)}
-                    title="Rinomina dispositivo"
-                  >
-                    MODIFICA
-                  </Button>
-                  {!isRevoked ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleOpenEditDevice(device)}
+                      title="Rinomina dispositivo"
+                      style={{ width: '90px' }}
+                    >
+                      MODIFICA
+                    </Button>
                     <Button
                       variant="danger"
                       size="sm"
@@ -514,10 +529,125 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                       onClick={() => handleRevoke(device.id, device.name)}
                       icon={<TrashIcon size={12} />}
                       title="Disconnetti sessione"
+                      style={{ width: '135px' }}
                     >
                       DISCONNETTI
                     </Button>
-                  ) : (
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Disconnected / Revoked Devices */}
+          {revokedDevices.length > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                marginTop: activeDevices.length > 0 ? '8px' : '0',
+              }}
+            >
+              {activeDevices.length > 0 && (
+                <div style={{ borderTop: '1px dashed #222222', margin: '10px 0 16px 0' }} />
+              )}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontFamily: FONT_MONO,
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: oledTheme.colors.textMuted,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  marginBottom: '2px',
+                }}
+              >
+                <div style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#EF4444' }} />
+                <span>DISPOSITIVI SCONNESSI ({revokedDevices.length})</span>
+              </div>
+              {revokedDevices.map((device) => (
+                <div
+                  key={device.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '14px 18px',
+                    backgroundColor: '#0A0A0A',
+                    border: '1px dashed #262626',
+                    borderRadius: oledTheme.radius.md,
+                    opacity: 0.75,
+                    gap: '12px',
+                    flexWrap: 'wrap',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div
+                      style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: oledTheme.radius.sm,
+                        backgroundColor: '#111111',
+                        border: '1px solid #1C1C1C',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: oledTheme.colors.textMuted,
+                      }}
+                    >
+                      {getDeviceIcon(device.device_type)}
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span
+                          style={{
+                            fontFamily: FONT_MONO,
+                            fontWeight: 700,
+                            fontSize: '14px',
+                            color: oledTheme.colors.textSecondary,
+                          }}
+                        >
+                          {device.name}
+                        </span>
+                        <Badge variant="danger">
+                          DISCONNESSO
+                        </Badge>
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: FONT_MONO,
+                          fontSize: '11px',
+                          color: oledTheme.colors.textMuted,
+                          marginTop: '4px',
+                        }}
+                      >
+                        Piattaforma: {device.platform} • Ultimo accesso:{' '}
+                        <span style={{ color: oledTheme.colors.textMuted }}>
+                          {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : 'N/D'}
+                        </span>
+                        {device.revoked_at && (
+                          <span> • Disconnesso il: {new Date(device.revoked_at).toLocaleString()}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleOpenEditDevice(device)}
+                      title="Rinomina dispositivo"
+                      style={{ width: '90px' }}
+                    >
+                      MODIFICA
+                    </Button>
                     <Button
                       variant="danger"
                       size="sm"
@@ -525,14 +655,15 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                       onClick={() => handlePermanentDelete(device.id, device.name)}
                       icon={<TrashIcon size={12} />}
                       title="Elimina definitivamente dalla lista"
+                      style={{ width: '135px' }}
                     >
                       RIMUOVI
                     </Button>
-                  )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              ))}
+            </div>
+          )}
         </div>
       )}
 
