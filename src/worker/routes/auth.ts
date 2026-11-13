@@ -8,6 +8,7 @@ import {
   hashToken,
 } from "../crypto";
 import { rateLimit } from "../rate-limit";
+import { requireAuth } from "../middleware/auth";
 
 export const authRouter = new Hono<AppEnv>();
 
@@ -197,6 +198,68 @@ async function handleDeviceLogin(c: Context<AppEnv>) {
 authRouter.post("/device-login", handleDeviceLogin);
 authRouter.post("/auth/device-login", handleDeviceLogin);
 
+// Generate Ephemeral One-Time QR Connect Token
+async function handleCreateQrToken(c: Context<AppEnv>) {
+  let body: any = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    // empty body is fine
+  }
+
+  const profileId = body?.profileId;
+  let targetProfileId = profileId;
+
+  if (!targetProfileId) {
+    const firstProfile = await c.env.DB.prepare(
+      "SELECT id FROM profiles ORDER BY created_at ASC LIMIT 1"
+    ).first<{ id: string }>();
+    if (!firstProfile) {
+      return c.json({ error: "No profile available" }, 400);
+    }
+    targetProfileId = firstProfile.id;
+  } else {
+    const p = await c.env.DB.prepare("SELECT id FROM profiles WHERE id = ?")
+      .bind(targetProfileId)
+      .first<{ id: string }>();
+    if (!p) {
+      return c.json({ error: "Profile not found" }, 404);
+    }
+  }
+
+  const now = Date.now();
+  const ttlMs = 5 * 60 * 1000; // 5 minutes TTL
+  const expiresAt = now + ttlMs;
+  const qrToken = `qr_${crypto.randomUUID().replace(/-/g, "")}`;
+  const secretHash = await hashToken(qrToken);
+
+  await c.env.DB.prepare(`
+    INSERT INTO pairing_codes (
+      code, pair_secret_hash, device_name, device_type, platform,
+      status, approved_profile_id, issued_device_id,
+      raw_device_token_encrypted_or_ephemeral, expires_at, created_at
+    )
+    VALUES (?, ?, 'KuroTV Mobile', 'mobile', 'android', 'approved', ?, NULL, NULL, ?, ?)
+  `)
+    .bind(qrToken, secretHash, targetProfileId, expiresAt, now)
+    .run();
+
+  return c.json(
+    {
+      ok: true,
+      qrToken,
+      expiresAt,
+      expiresInSeconds: 300,
+      profileId: targetProfileId,
+    },
+    201
+  );
+}
+
+authRouter.post("/qr-token", requireAuth, handleCreateQrToken);
+authRouter.post("/auth/qr-token", requireAuth, handleCreateQrToken);
+
+// Handle Single-Use Token Exchange
 async function handleExchange(c: Context<AppEnv>) {
   let body: any;
   try {
@@ -214,40 +277,7 @@ async function handleExchange(c: Context<AppEnv>) {
 
   const now = Date.now();
 
-  // 1. First check if it matches an existing active device token (token exchange)
-  const inputHash = await hashToken(rawInputToken);
-  const existingDevice = await c.env.DB.prepare(
-    "SELECT id, profile_id FROM devices WHERE token_hash = ? AND revoked_at IS NULL"
-  )
-    .bind(inputHash)
-    .first<{ id: string; profile_id: string }>();
-
-  if (existingDevice) {
-    const profileId = existingDevice.profile_id;
-    const deviceToken = generateDeviceToken();
-    const tokenHash = await hashToken(deviceToken);
-    const deviceId = crypto.randomUUID();
-
-    await c.env.DB.prepare(`
-      INSERT INTO devices (id, profile_id, name, device_type, platform, token_hash, last_seen_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-      .bind(
-        deviceId,
-        profileId,
-        deviceName || "Mobile Device",
-        deviceType || "mobile",
-        platform || "mobile",
-        tokenHash,
-        now,
-        now
-      )
-      .run();
-
-    return c.json({ ok: true, deviceToken, deviceId, profileId }, 200);
-  }
-
-  // 2. Otherwise check pairing_codes table
+  // 1. Check in pairing_codes table (for QR ephemeral codes and pairing codes)
   const record = await c.env.DB.prepare(
     "SELECT * FROM pairing_codes WHERE code = ?"
   )
@@ -266,48 +296,133 @@ async function handleExchange(c: Context<AppEnv>) {
       created_at: number;
     }>();
 
-  if (!record) {
-    return c.json({ error: "Invalid or expired exchange token" }, 404);
-  }
+  if (record) {
+    if (record.status === "consumed") {
+      return c.json({ error: "Token già utilizzato o scaduto. Genera un nuovo codice QR." }, 410);
+    }
 
-  if (record.expires_at < now || record.status === "expired") {
-    return c.json({ error: "Exchange token expired" }, 410);
-  }
+    if (record.expires_at < now || record.status === "expired") {
+      return c.json({ error: "Token scaduto. Genera un nuovo codice QR." }, 410);
+    }
 
-  if (record.status !== "approved" || !record.approved_profile_id) {
-    return c.json({ error: "Exchange token not in approved status" }, 401);
-  }
+    if (record.status !== "approved" || !record.approved_profile_id) {
+      return c.json({ error: "Token non in stato approvato" }, 401);
+    }
 
-  // Consume token atomically
-  await c.env.DB.prepare(
-    "UPDATE pairing_codes SET status = 'consumed' WHERE code = ?"
-  )
-    .bind(rawInputToken)
-    .run();
-
-  const profileId = record.approved_profile_id;
-  const deviceToken = generateDeviceToken();
-  const tokenHash = await hashToken(deviceToken);
-  const deviceId = crypto.randomUUID();
-
-  await c.env.DB.prepare(`
-    INSERT INTO devices (id, profile_id, name, device_type, platform, token_hash, last_seen_at, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `)
-    .bind(
-      deviceId,
-      profileId,
-      deviceName || record.device_name || "Mobile Device",
-      deviceType || "mobile",
-      platform || record.platform || "unknown",
-      tokenHash,
-      now,
-      now
+    // ATOMICALLY consume token: guarantees 100% single-use
+    const consumeRes = await c.env.DB.prepare(
+      "UPDATE pairing_codes SET status = 'consumed' WHERE code = ? AND status = 'approved'"
     )
-    .run();
+      .bind(rawInputToken)
+      .run();
 
-  return c.json({ ok: true, deviceToken, deviceId, profileId }, 200);
+    if (consumeRes.meta.changes === 0) {
+      return c.json({ error: "Token già utilizzato contemporaneamente" }, 410);
+    }
+
+    const profileId = record.approved_profile_id;
+    const deviceToken = generateDeviceToken();
+    const tokenHash = await hashToken(deviceToken);
+    const deviceId = crypto.randomUUID();
+
+    await c.env.DB.prepare(`
+      INSERT INTO devices (id, profile_id, name, device_type, platform, token_hash, last_seen_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+      .bind(
+        deviceId,
+        profileId,
+        deviceName || record.device_name || "KuroTV Mobile",
+        deviceType || "mobile",
+        platform || record.platform || "android",
+        tokenHash,
+        now,
+        now
+      )
+      .run();
+
+    return c.json({ ok: true, deviceToken, deviceId, profileId }, 200);
+  }
+
+  // 2. Check if it matches an existing active device token (token migration)
+  const inputHash = await hashToken(rawInputToken);
+  const existingDevice = await c.env.DB.prepare(
+    "SELECT id, profile_id FROM devices WHERE token_hash = ? AND revoked_at IS NULL"
+  )
+    .bind(inputHash)
+    .first<{ id: string; profile_id: string }>();
+
+  if (existingDevice) {
+    const profileId = existingDevice.profile_id;
+    const deviceToken = generateDeviceToken();
+    const tokenHash = await hashToken(deviceToken);
+    const deviceId = crypto.randomUUID();
+
+    // Revoke the old token so it cannot be reused
+    await c.env.DB.prepare("UPDATE devices SET revoked_at = ? WHERE id = ?")
+      .bind(now, existingDevice.id)
+      .run();
+
+    await c.env.DB.prepare(`
+      INSERT INTO devices (id, profile_id, name, device_type, platform, token_hash, last_seen_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+      .bind(
+        deviceId,
+        profileId,
+        deviceName || "KuroTV Mobile",
+        deviceType || "mobile",
+        platform || "android",
+        tokenHash,
+        now,
+        now
+      )
+      .run();
+
+    return c.json({ ok: true, deviceToken, deviceId, profileId }, 200);
+  }
+
+  return c.json({ error: "Invalid or expired exchange token" }, 404);
 }
 
 authRouter.post("/exchange", handleExchange);
 authRouter.post("/auth/exchange", handleExchange);
+
+// Logout and Revoke Session
+async function handleLogout(c: Context<AppEnv>) {
+  const now = Date.now();
+  let deviceId: string | undefined = c.get("deviceId" as any);
+
+  if (!deviceId) {
+    const authHeader = c.req.header("Authorization");
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.slice(7).trim();
+      const tokenHash = await hashToken(token);
+      const dev = await c.env.DB.prepare(
+        "SELECT id FROM devices WHERE token_hash = ? AND revoked_at IS NULL"
+      )
+        .bind(tokenHash)
+        .first<{ id: string }>();
+      if (dev) {
+        deviceId = dev.id;
+      }
+    }
+  }
+
+  if (deviceId) {
+    await c.env.DB.prepare("UPDATE devices SET revoked_at = ? WHERE id = ?")
+      .bind(now, deviceId)
+      .run();
+  }
+
+  return c.json(
+    {
+      ok: true,
+      message: deviceId ? "Session successfully revoked" : "No active session found",
+    },
+    200
+  );
+}
+
+authRouter.post("/logout", handleLogout);
+authRouter.post("/auth/logout", handleLogout);

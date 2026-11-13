@@ -174,6 +174,25 @@ export interface PairingApproveResponse {
   deviceId: string;
 }
 
+export interface TokenExchangeRequest {
+  token: string;
+  deviceName?: string;
+  deviceType?: string;
+  platform?: string;
+}
+
+export interface TokenExchangeResponse {
+  ok: boolean;
+  deviceToken: string;
+  deviceId: string;
+  profileId: string;
+}
+
+export interface LogoutResponse {
+  ok: boolean;
+  message: string;
+}
+
 export interface TombstoneItem {
   type: "favorite" | "continue_watching" | "watch_history" | "watch_progress" | "search_history" | string;
   key: string;

@@ -369,6 +369,58 @@ describe("Tier 1: Token Storage & Revocation (Feature 5)", () => {
     const test2 = await harness.get("/api/devices");
     expect(test2.status).toBe(200);
   });
+
+  it("5.7 POST /api/auth/logout revokes caller device session and rejects subsequent calls with 401", async () => {
+    await harness.post("/api/setup", { masterPassword: "Password123!" });
+    const loginRes = await harness.post<{ token: string }>("/api/auth/login", {
+      password: "Password123!",
+    });
+    const token = loginRes.body.token;
+
+    harness.setBearerToken(token);
+    const logoutRes = await harness.post<{ ok: boolean; message: string }>("/api/auth/logout", {});
+    expect(logoutRes.status).toBe(200);
+    expect(logoutRes.body.ok).toBe(true);
+
+    // Any subsequent call using the revoked token must receive 401
+    const postLogoutCall = await harness.get("/api/devices");
+    expect(postLogoutCall.status).toBe(401);
+  });
+
+  it("5.8 POST /api/auth/qr-token generates single-use token; second exchange fails with 410", async () => {
+    const setupRes = await harness.post<{ profileId: string }>("/api/setup", {
+      masterPassword: "Password123!",
+    });
+    const loginRes = await harness.post<{ token: string }>("/api/auth/login", {
+      password: "Password123!",
+    });
+    harness.setBearerToken(loginRes.body.token);
+
+    // Generate QR token
+    const qrRes = await harness.post<{ ok: boolean; qrToken: string }>("/api/auth/qr-token", {
+      profileId: setupRes.body.profileId,
+    });
+    expect(qrRes.status).toBe(201);
+    expect(qrRes.body.ok).toBe(true);
+    expect(qrRes.body.qrToken).toMatch(/^qr_/);
+
+    // Unauthenticated device exchanges the QR token for device token
+    harness.clearAuth();
+    const exchange1 = await harness.post<{ ok: boolean; deviceToken: string; profileId: string }>(
+      "/api/auth/exchange",
+      { token: qrRes.body.qrToken, deviceName: "Mobile Client A" }
+    );
+    expect(exchange1.status).toBe(200);
+    expect(exchange1.body.ok).toBe(true);
+    expect(exchange1.body.deviceToken).toBeDefined();
+
+    // Second exchange of the exact same token MUST fail with 410 Gone
+    const exchange2 = await harness.post<any>("/api/auth/exchange", {
+      token: qrRes.body.qrToken,
+      deviceName: "Mobile Client B",
+    });
+    expect(exchange2.status).toBe(410);
+  });
 });
 
 describe("Tier 1: In-Memory Rate Limiting (Feature 6)", () => {

@@ -86,15 +86,18 @@ KuroTV_S is carefully engineered to operate well below Cloudflare's Free tier th
 | `POST` | `/api/setup` | First-run setup wizard (locked once completed) | No |
 | `POST` | `/api/auth/login` | Master password authentication (returns session token) | No (Rate-limited) |
 | `POST` | `/api/auth/device-login` | Direct device login with profile binding | No (Rate-limited) |
-| `POST` | `/api/auth/exchange` | Exchange one-time QR token for device token | No |
+| `POST` | `/api/auth/qr-token` | Generate ephemeral single-use QR token (5m TTL) | Bearer Token |
+| `POST` | `/api/auth/exchange` | Atomically exchange single-use QR token for device token | No |
+| `POST` | `/api/auth/logout` | Revoke session and invalidate device token | Bearer Token |
 | `POST` | `/api/pair/start` | Request 6-character TV pairing code & secret | No (Rate-limited) |
 | `GET` | `/api/pair/status` | Poll TV pairing status (requires `X-Pair-Secret`) | Pair Secret |
 | `GET` | `/api/pair/info` | Public pairing code preview for Web Console | No |
 | `POST` | `/api/pair/approve` | Authorize pairing code and issue device token | Bearer Token |
 | `GET` | `/api/profiles` | List instance viewing profiles | Bearer Token |
 | `POST` | `/api/profiles` | Create new viewing profile | Bearer Token |
-| `GET` | `/api/devices` | List connected devices | Bearer Token |
-| `DELETE`| `/api/devices/:id` | Revoke device access (immediate 401 on device) | Bearer Token |
+| `GET` | `/api/devices` | List connected devices (ordered by last seen) | Bearer Token |
+| `DELETE`| `/api/devices/:id` | Revoke device or permanently delete disconnected device | Bearer Token |
+| `DELETE`| `/api/devices/revoked` | Bulk purge all disconnected/revoked devices | Bearer Token |
 | `GET` | `/api/sync/pull` | Delta sync pull (`?since=<epochMs>`) | Bearer Token |
 | `POST` | `/api/sync/push` | Batched delta sync push (atomic `db.batch() <= 50`) | Bearer Token |
 | `GET` | `/api/sync/export` | Export full or profile JSON backup | Bearer Token |

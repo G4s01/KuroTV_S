@@ -3,6 +3,7 @@ import { oledTheme, FONT_MONO } from '../../theme';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { DownloadIcon, UploadIcon, CheckIcon } from '../../components/Icons';
+import { ConfirmModal } from '../../components/ConfirmModal';
 import { api } from '../../api';
 
 interface BackupViewProps {
@@ -16,6 +17,18 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
   const [fileName, setFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    submessage?: string;
+    onConfirm: () => Promise<void> | void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   const handleExport = async () => {
     setExporting(true);
@@ -61,27 +74,33 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
     reader.readAsText(file);
   };
 
-  const handleImport = async () => {
+  const handleImport = () => {
     if (!importPayload) return;
-    const confirmed = window.confirm(
-      'Are you sure you want to restore this backup? Existing records will be updated and missing profiles created.'
-    );
-    if (!confirmed) return;
-
-    setImporting(true);
-    setError(null);
-    setSuccessMsg(null);
-    try {
-      const res = await api.importBackup(importPayload);
-      setSuccessMsg(res.message || 'Backup successfully restored to instance.');
-      setImportPayload(null);
-      setFileName(null);
-      if (onRestoreSuccess) onRestoreSuccess();
-    } catch (err: any) {
-      setError(err?.message || 'Failed to restore backup.');
-    } finally {
-      setImporting(false);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'RIPRISTINA BACKUP',
+      message:
+        'Sei sicuro di voler ripristinare questo backup sulla tua istanza?',
+      submessage:
+        'I record esistenti verranno aggiornati con i dati del file e gli eventuali profili mancanti verranno creati.',
+      onConfirm: async () => {
+        setImporting(true);
+        setError(null);
+        setSuccessMsg(null);
+        try {
+          const res = await api.importBackup(importPayload);
+          setSuccessMsg(res.message || 'Backup successfully restored to instance.');
+          setImportPayload(null);
+          setFileName(null);
+          if (onRestoreSuccess) onRestoreSuccess();
+        } catch (err: any) {
+          setError(err?.message || 'Failed to restore backup.');
+        } finally {
+          setImporting(false);
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
   };
 
   return (
@@ -306,6 +325,18 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
           </Button>
         </Card>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        submessage={confirmModal.submessage}
+        confirmLabel="RIPRISTINA"
+        variant="primary"
+        loading={importing}
+        onConfirm={confirmModal.onConfirm}
+        onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

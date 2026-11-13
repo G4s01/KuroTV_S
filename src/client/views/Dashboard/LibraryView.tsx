@@ -4,6 +4,7 @@ import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { TrashIcon, RefreshIcon, FilmIcon } from '../../components/Icons';
+import { ConfirmModal } from '../../components/ConfirmModal';
 import {
   api,
   type ContinueWatchingViewItem,
@@ -25,6 +26,18 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    submessage?: string;
+    onConfirm: () => Promise<void> | void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   const fetchLibrary = async () => {
     setLoading(true);
@@ -45,29 +58,47 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
     fetchLibrary();
   }, [activeProfileId]);
 
-  const handleDeleteItem = async (
+  const promptDeleteItem = (
     type: 'continue_watching' | 'favorite' | 'watch_history',
-    key: string
+    key: string,
+    label: string
   ) => {
-    setDeletingKey(key);
-    try {
-      await api.deleteLibraryItem(type, key);
-      if (type === 'continue_watching') {
-        setContinueWatching((prev) => prev.filter((item) => item.animeId !== key));
-      } else if (type === 'favorite') {
-        setFavorites((prev) => prev.filter((item) => item.id !== key));
-      } else if (type === 'watch_history') {
-        const [animeId, epStr] = key.split(':');
-        const ep = parseInt(epStr, 10);
-        setWatchHistory((prev) =>
-          prev.filter((item) => !(item.animeId === animeId && item.episodeNumber === ep))
-        );
-      }
-    } catch (err: any) {
-      alert(`Failed to delete item: ${err?.message || 'Unknown error'}`);
-    } finally {
-      setDeletingKey(null);
-    }
+    const typeLabel =
+      type === 'continue_watching'
+        ? 'Continua a guardare'
+        : type === 'favorite'
+        ? 'Preferito'
+        : 'Cronologia visione';
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'ELIMINA ELEMENTO',
+      message: `Sei sicuro di voler eliminare "${label}"?`,
+      submessage: `Questo elemento verrà rimosso da ${typeLabel} per il profilo attivo.`,
+      onConfirm: async () => {
+        setDeletingKey(key);
+        setError(null);
+        try {
+          await api.deleteLibraryItem(type, key);
+          if (type === 'continue_watching') {
+            setContinueWatching((prev) => prev.filter((item) => item.animeId !== key));
+          } else if (type === 'favorite') {
+            setFavorites((prev) => prev.filter((item) => item.id !== key));
+          } else if (type === 'watch_history') {
+            const [animeId, epStr] = key.split(':');
+            const ep = parseInt(epStr, 10);
+            setWatchHistory((prev) =>
+              prev.filter((item) => !(item.animeId === animeId && item.episodeNumber === ep))
+            );
+          }
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          setError(`Impossibile eliminare l'elemento: ${err?.message || 'Errore sconosciuto'}`);
+        } finally {
+          setDeletingKey(null);
+        }
+      },
+    });
   };
 
   return (
@@ -344,7 +375,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
                           variant="danger"
                           size="sm"
                           loading={deletingKey === item.animeId}
-                          onClick={() => handleDeleteItem('continue_watching', item.animeId)}
+                          onClick={() => promptDeleteItem('continue_watching', item.animeId, item.title)}
                           icon={<TrashIcon size={12} />}
                         >
                           DELETE
@@ -465,7 +496,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
                         variant="danger"
                         size="sm"
                         loading={deletingKey === fav.id}
-                        onClick={() => handleDeleteItem('favorite', fav.id)}
+                        onClick={() => promptDeleteItem('favorite', fav.id, fav.title)}
                         icon={<TrashIcon size={12} />}
                       >
                         DELETE
@@ -548,7 +579,13 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
                         variant="ghost"
                         size="sm"
                         loading={deletingKey === itemKey}
-                        onClick={() => handleDeleteItem('watch_history', itemKey)}
+                        onClick={() =>
+                          promptDeleteItem(
+                            'watch_history',
+                            itemKey,
+                            `${item.title} (EP ${item.episodeNumber})`
+                          )
+                        }
                         icon={<TrashIcon size={14} color="#EF4444" />}
                         title="Delete record"
                       />
@@ -560,6 +597,18 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
           )}
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        submessage={confirmModal.submessage}
+        confirmLabel="ELIMINA"
+        variant="danger"
+        loading={!!deletingKey}
+        onConfirm={confirmModal.onConfirm}
+        onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

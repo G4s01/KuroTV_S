@@ -161,9 +161,39 @@ export class KuroSyncApi {
     return this.activeProfileId;
   }
 
-  public logout() {
-    this.setToken(null);
-    this.setActiveProfileId(null);
+  public async logout(): Promise<void> {
+    try {
+      if (this.token) {
+        await this.request('/api/auth/logout', { method: 'POST' });
+      }
+    } catch (e) {
+      console.warn('Backend logout notification failed:', e);
+    } finally {
+      this.setToken(null);
+      this.setActiveProfileId(null);
+    }
+  }
+
+  /**
+   * Generate Ephemeral Single-Use QR Connect Token
+   */
+  public async createQrToken(profileId?: string): Promise<{
+    ok: boolean;
+    qrToken: string;
+    expiresAt: number;
+    expiresInSeconds: number;
+    profileId: string;
+  }> {
+    return this.request<{
+      ok: boolean;
+      qrToken: string;
+      expiresAt: number;
+      expiresInSeconds: number;
+      profileId: string;
+    }>('/api/auth/qr-token', {
+      method: 'POST',
+      body: JSON.stringify({ profileId }),
+    });
   }
 
   private async request<T>(

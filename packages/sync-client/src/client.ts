@@ -13,6 +13,9 @@ import type {
   RemotePullResponse,
   BackupExportData,
   BackupImportResponse,
+  TokenExchangeRequest,
+  TokenExchangeResponse,
+  LogoutResponse,
 } from "./types";
 
 /**
@@ -102,6 +105,42 @@ export class KuroSyncClient {
     if (data.deviceToken) {
       this.deviceToken = data.deviceToken;
     }
+    return data;
+  }
+
+  // --------------------------------------------------------------------------
+  // 2b. Ephemeral QR Token Exchange & Device Logout
+  // --------------------------------------------------------------------------
+  async exchangeToken(req: TokenExchangeRequest): Promise<TokenExchangeResponse> {
+    const res = await fetch(this.getUrl("/api/auth/exchange"), {
+      method: "POST",
+      headers: this.getHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(req),
+    });
+
+    if (!res.ok) {
+      await this.handleErrorResponse(res, "Token exchange");
+    }
+
+    const data = (await res.json()) as TokenExchangeResponse;
+    if (data.deviceToken) {
+      this.deviceToken = data.deviceToken;
+    }
+    return data;
+  }
+
+  async logout(): Promise<LogoutResponse> {
+    const res = await fetch(this.getUrl("/api/auth/logout"), {
+      method: "POST",
+      headers: this.getHeaders({ "Content-Type": "application/json" }),
+    });
+
+    if (!res.ok) {
+      await this.handleErrorResponse(res, "Logout");
+    }
+
+    const data = (await res.json()) as LogoutResponse;
+    this.deviceToken = undefined;
     return data;
   }
 

@@ -3,6 +3,7 @@ import { oledTheme, FONT_MONO } from '../../theme';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
+import { ConfirmModal } from '../../components/ConfirmModal';
 import { PlusIcon, TrashIcon, UserIcon, CheckIcon } from '../../components/Icons';
 import { api, type ProfileRecord } from '../../api';
 
@@ -37,6 +38,21 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    submessage?: string;
+    confirmLabel: string;
+    action: () => Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmLabel: 'ELIMINA',
+    action: async () => {},
+  });
+
   const handleCreateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProfileName.trim()) return;
@@ -52,37 +68,43 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
         onSelectProfile(res.profile.id);
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to create profile.');
+      setError(err?.message || 'Impossibile creare il profilo.');
     } finally {
       setCreating(false);
     }
   };
 
-  const handleDeleteProfile = async (id: string, name: string) => {
+  const handleDeleteProfile = (id: string, name: string) => {
     if (profiles.length <= 1) {
-      alert('Cannot delete the only profile on this instance.');
+      setError('Impossibile eliminare l\'unico profilo presente su questa istanza.');
       return;
     }
-    const confirmed = window.confirm(
-      `Are you sure you want to delete profile "${name}"? All associated Continue Watching, Favorites, and Watch History records for this profile will be permanently deleted.`
-    );
-    if (!confirmed) return;
 
-    setDeletingId(id);
-    try {
-      await api.deleteProfile(id);
-      await onRefreshProfiles();
-      if (activeProfileId === id) {
-        const remaining = profiles.filter((p) => p.id !== id);
-        if (remaining[0]) {
-          onSelectProfile(remaining[0].id);
+    setConfirmModal({
+      isOpen: true,
+      title: 'ELIMINA PROFILO',
+      message: `Vuoi eliminare definitivamente il profilo "${name}"?`,
+      submessage: 'Tutti i dati associati (Continua a guardare, Preferiti, Cronologia e Impostazioni) per questo profilo verranno rimossi permanentemente.',
+      confirmLabel: 'ELIMINA PROFILO',
+      action: async () => {
+        setDeletingId(id);
+        try {
+          await api.deleteProfile(id);
+          await onRefreshProfiles();
+          if (activeProfileId === id) {
+            const remaining = profiles.filter((p) => p.id !== id);
+            if (remaining[0]) {
+              onSelectProfile(remaining[0].id);
+            }
+          }
+        } catch (err: any) {
+          setError(`Errore durante l'eliminazione: ${err?.message || 'Errore sconosciuto'}`);
+        } finally {
+          setDeletingId(null);
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         }
-      }
-    } catch (err: any) {
-      alert(`Failed to delete profile: ${err?.message || 'Unknown error'}`);
-    } finally {
-      setDeletingId(null);
-    }
+      },
+    });
   };
 
   return (
@@ -383,6 +405,17 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
           </div>
         </form>
       </Modal>
+
+      {/* Integrated In-UI Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.action}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        submessage={confirmModal.submessage}
+        confirmLabel={confirmModal.confirmLabel}
+      />
     </div>
   );
 };

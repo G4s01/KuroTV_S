@@ -235,7 +235,101 @@ Android TV                              KuroTV_S Worker                    Mobil
 
 ---
 
-## 6. Smart "IN PARI" (Caught-Up) Sync Flow
+## 6. Smartphone Single-Use QR Connect Flow (`POST /api/auth/qr-token` & `/api/auth/exchange`)
+
+For mobile devices, KuroTV_S provides an instantaneous zero-typing connection flow using ephemeral, strictly single-use QR codes.
+
+```
+Web Console                               KuroTV_S Worker                    Mobile App (KuroTV_M)
+    │                                            │                                     │
+    │  1. POST /api/auth/qr-token                │                                     │
+    │     { profileId: "prof-1" }                │                                     │
+    ├───────────────────────────────────────────►│                                     │
+    │  ◄─────────────────────────────────────────┤                                     │
+    │  { qrToken: "qr_...", expiresAt: ... }    │                                     │
+    │                                            │                                     │
+    │  [Renders QR Code with ISO 18004 SVG]     │                                     │
+    │  kurotv://sync?token=qr_...&endpoint=...   │                                     │
+    │                                            │  2. Scan QR from Web Console        │
+    │                                            │     Deep-link opens KuroTV_M        │
+    │                                            │  3. POST /api/auth/exchange         │
+    │                                            │     { token: "qr_...", ... }        │
+    │                                            │◄────────────────────────────────────┤
+    │                                            │  [Atomic Check & Consume (status='consumed')]
+    │                                            │  [Creates Device row in D1]         │
+    │                                            ├────────────────────────────────────►│
+    │                                            │  { ok: true, deviceToken: "..." }   │
+    │                                            │                                     │
+    │                                            │  [Store deviceToken in MMKV]        │
+    │                                            │  [Run initial pullDelta()]          │
+```
+
+### Protocol Guarantees:
+- **Strictly Single-Use**: When `POST /api/auth/exchange` is called, the backend executes an atomic SQLite transaction:
+  ```sql
+  UPDATE pairing_codes SET status = 'consumed' WHERE code = ? AND status = 'approved'
+  ```
+  If this row was already consumed or concurrently accessed, the backend immediately rejects the request with HTTP **410 Gone**. The token can never be intercepted or replayed.
+- **5-Minute Ephemeral TTL**: Every QR token expires automatically after 300 seconds. If scanned after expiration, it returns HTTP 410.
+- **Web Console Countdown & Regeneration**: The Web Console displays an active live timer for the remaining validity and offers a one-click "RIGENERA QR" action to seamlessly generate fresh tokens without reloading.
+
+### Client Implementation Pattern:
+```typescript
+// In KuroTV_M deep link or camera scan handler:
+const qrToken = urlParams.get("token");
+const workerEndpoint = urlParams.get("endpoint");
+
+const client = new KuroSyncClient({ baseUrl: workerEndpoint });
+try {
+  const result = await client.exchangeToken({
+    token: qrToken,
+    deviceName: "Smartphone Personal",
+    platform: "android",
+  });
+
+  // Save device token to MMKV and initiate first sync
+  mmkv.set("sync.device_token", result.deviceToken);
+  mmkv.set("sync.profile_id", result.profileId);
+  await client.pullDelta(0);
+} catch (error: any) {
+  // If status is 410, prompt user to regenerate the QR in Web Console
+  console.error("QR Code non valido o già utilizzato:", error.message);
+}
+```
+
+---
+
+## 7. Device Logout & Session Revocation (`client.logout()` / `POST /api/auth/logout`)
+
+When logging out from the KuroTV Mobile app, Android TV, or Web Console, the session must be actively invalidated on the backend:
+
+1. **Client Disconnect**:
+   ```typescript
+   // KuroTV Client Logout handler:
+   try {
+     await syncClient.logout();
+   } finally {
+     // Always wipe local credentials even if network is offline
+     mmkv.delete("sync.device_token");
+     mmkv.delete("sync.last_timestamp");
+   }
+   ```
+2. **Backend Revocation**:
+   `POST /api/auth/logout` looks up the calling device via its Bearer token SHA-256 hash and executes:
+   ```sql
+   UPDATE devices SET revoked_at = ? WHERE id = ?
+   ```
+3. **Immediate Lockout**:
+   Once `revoked_at` is set, any subsequent attempt to synchronize (`pullDelta`, `pushDelta`, etc.) receives HTTP **401 Unauthorized** instantly.
+4. **Web Console Management**:
+   In the **Dispositivi** tab of the Web Console:
+   - Disconnected devices are displayed as `DISCONNESSO` with their revocation timestamp.
+   - Users can permanently delete individual disconnected devices with `DELETE /api/devices/:id`.
+   - Users can click **RIMUOVI DISCONNESSI** (`DELETE /api/devices/revoked`) to bulk-purge all historical disconnected sessions in a single operation.
+
+---
+
+## 8. Smart "IN PARI" (Caught-Up) Sync Flow
 
 In KuroTV, an anime marked as **"IN PARI"** (`isCaughtUp = true`) indicates that the user has watched the most recently released episode of an ongoing simulcast series and is waiting for new episodes to air.
 
@@ -253,7 +347,7 @@ When synchronizing Continue Watching across devices, `mergeLocalAndRemote()` pre
 
 ---
 
-## 7. Zero-Dependency Client Initialization Example
+## 9. Zero-Dependency Client Initialization Example
 
 ```typescript
 import { KuroSyncClient, mergeLocalAndRemote, type LocalStorageState } from "@kurosync/sync-client";

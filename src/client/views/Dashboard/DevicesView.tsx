@@ -3,6 +3,7 @@ import { oledTheme, FONT_MONO } from '../../theme';
 import { Button } from '../../components/Button';
 import { Badge } from '../../components/Badge';
 import { Modal } from '../../components/Modal';
+import { ConfirmModal } from '../../components/ConfirmModal';
 import { QrCode } from '../../components/QrCode';
 import {
   TvIcon,
@@ -29,8 +30,29 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
+
+  // QR Modal & Ephemeral Single-Use Token
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [qrToken, setQrToken] = useState<string | null>(null);
+  const [qrExpiresAt, setQrExpiresAt] = useState<number | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Integrated UI Confirmation Dialog (replaces browser confirm)
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    submessage?: string;
+    confirmLabel: string;
+    action: () => Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmLabel: 'CONFERMA',
+    action: async () => {},
+  });
 
   const fetchDevices = async () => {
     setLoading(true);
@@ -38,7 +60,6 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
     try {
       const res = await api.listDevices(activeProfileId || undefined);
       const list = res.devices || [];
-      // Ensure sorted by last seen (descending)
       list.sort((a, b) => (b.last_seen_at || b.created_at) - (a.last_seen_at || a.created_at));
       setDevices(list);
     } catch (err: any) {
@@ -52,69 +73,112 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
     fetchDevices();
   }, [activeProfileId]);
 
-  const handleRevoke = async (id: string, name: string) => {
-    const confirmed = window.confirm(
-      `Disconnettere "${name}"? La sessione verrà invalidata immediatamente.`
-    );
-    if (!confirmed) return;
-
-    setActionId(id);
+  // Generate a fresh Single-Use Ephemeral QR token when opening modal
+  const generateQrToken = async () => {
+    setQrLoading(true);
+    setError(null);
     try {
-      await api.revokeDevice(id);
-      await fetchDevices();
+      const res = await api.createQrToken(activeProfileId || undefined);
+      setQrToken(res.qrToken);
+      setQrExpiresAt(res.expiresAt);
     } catch (err: any) {
-      alert(`Errore: ${err?.message || 'Impossibile disconnettere il dispositivo'}`);
+      setError(err?.message || 'Impossibile generare il token QR monouso.');
     } finally {
-      setActionId(null);
+      setQrLoading(false);
     }
   };
 
-  const handlePermanentDelete = async (id: string, name: string) => {
-    const confirmed = window.confirm(
-      `Rimuovere definitivamente "${name}" dalla lista dei dispositivi?`
-    );
-    if (!confirmed) return;
-
-    setActionId(id);
-    try {
-      await api.deleteDevicePermanently(id);
-      await fetchDevices();
-    } catch (err: any) {
-      alert(`Errore: ${err?.message || 'Impossibile rimuovere il dispositivo'}`);
-    } finally {
-      setActionId(null);
+  useEffect(() => {
+    if (isQrModalOpen) {
+      generateQrToken();
+    } else {
+      setQrToken(null);
+      setQrExpiresAt(null);
     }
-  };
-
-  const handlePurgeAllRevoked = async () => {
-    const confirmed = window.confirm(
-      'Rimuovere definitivamente tutte le sessioni disconnesse?'
-    );
-    if (!confirmed) return;
-
-    setLoading(true);
-    try {
-      await api.purgeRevokedDevices(activeProfileId || undefined);
-      await fetchDevices();
-    } catch (err: any) {
-      alert(`Errore: ${err?.message || 'Impossibile rimuovere le sessioni'}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [isQrModalOpen, activeProfileId]);
 
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://kurosync.workers.dev';
-  const token = api.getToken() || '';
-  const connectUrl = `kurosync://connect?url=${encodeURIComponent(origin)}&token=${encodeURIComponent(
-    token
-  )}&profile=${encodeURIComponent(activeProfileId || '')}`;
+  const connectUrl = qrToken
+    ? `kurosync://connect?url=${encodeURIComponent(origin)}&token=${encodeURIComponent(
+        qrToken
+      )}&profile=${encodeURIComponent(activeProfileId || '')}`
+    : '';
 
   const handleCopyConnectUrl = () => {
-    if (navigator.clipboard) {
+    if (connectUrl && navigator.clipboard) {
       navigator.clipboard.writeText(connectUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  };
+
+  // Revoke device dialog
+  const handleRevoke = (id: string, name: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'DISCONNETTI DISPOSITIVO',
+      message: `Vuoi disconnettere "${name}"?`,
+      submessage: 'La sessione del dispositivo verrà invalidata immediatamente e le successive richieste saranno rifiutate.',
+      confirmLabel: 'DISCONNETTI',
+      action: async () => {
+        setActionId(id);
+        try {
+          await api.revokeDevice(id);
+          await fetchDevices();
+        } catch (err: any) {
+          setError(`Errore durante la disconnessione: ${err?.message || 'Errore sconosciuto'}`);
+        } finally {
+          setActionId(null);
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  };
+
+  // Permanent delete dialog
+  const handlePermanentDelete = (id: string, name: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'ELIMINA DEFINITIVAMENTE',
+      message: `Rimuovere definitivamente "${name}"?`,
+      submessage: 'Il record verrà eliminato in modo permanente dal database D1.',
+      confirmLabel: 'ELIMINA',
+      action: async () => {
+        setActionId(id);
+        try {
+          await api.deleteDevicePermanently(id);
+          await fetchDevices();
+        } catch (err: any) {
+          setError(`Errore durante l'eliminazione: ${err?.message || 'Errore sconosciuto'}`);
+        } finally {
+          setActionId(null);
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  };
+
+  // Purge all revoked devices dialog
+  const handlePurgeAllRevoked = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'PULISCI DISCONNESSI',
+      message: 'Rimuovere definitivamente tutte le sessioni disconnesse?',
+      submessage: 'Tutti i dispositivi revocati verranno cancellati in modo permanente dal database D1.',
+      confirmLabel: 'PULISCI TUTTO',
+      action: async () => {
+        setLoading(true);
+        try {
+          await api.purgeRevokedDevices(activeProfileId || undefined);
+          await fetchDevices();
+        } catch (err: any) {
+          setError(`Errore durante la pulizia: ${err?.message || 'Errore sconosciuto'}`);
+        } finally {
+          setLoading(false);
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
   };
 
   const getDeviceIcon = (type: string) => {
@@ -164,7 +228,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
               margin: 0,
             }}
           >
-            Gestisci le autorizzazioni per Android TV, KuroTV Mobile e sessioni Web (ordinati per ultimo accesso).
+            Gestisci le autorizzazioni per Android TV, KuroTV Mobile e Web (ordinati per ultimo accesso).
           </p>
         </div>
 
@@ -344,7 +408,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
         </div>
       )}
 
-      {/* Connect Smartphone Modal with High-Contrast QR Code */}
+      {/* Connect Smartphone Modal with Ephemeral Single-Use QR Code */}
       <Modal
         isOpen={isQrModalOpen}
         onClose={() => setIsQrModalOpen(false)}
@@ -365,7 +429,77 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
             Inquadra questo QR code dall'app <strong>KuroTV Mobile</strong> su <em>Impostazioni &gt; Sincronizzazione</em> per collegarti all'istante.
           </p>
 
-          <QrCode value={connectUrl} size={210} />
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: '220px',
+              width: '100%',
+            }}
+          >
+            {qrLoading ? (
+              <div
+                style={{
+                  fontFamily: FONT_MONO,
+                  fontSize: '12px',
+                  color: oledTheme.colors.textMuted,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                Generazione token monouso...
+              </div>
+            ) : connectUrl ? (
+              <QrCode value={connectUrl} size={210} />
+            ) : (
+              <Button variant="secondary" size="sm" onClick={generateQrToken}>
+                GENERA QR CODE
+              </Button>
+            )}
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              width: '100%',
+              padding: '6px 0',
+            }}
+          >
+            <span
+              style={{
+                fontFamily: FONT_MONO,
+                fontSize: '11px',
+                color: '#10B981',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <span
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  backgroundColor: '#10B981',
+                }}
+              />
+              TOKEN MONOUSO (VALIDO 5 MINUTI)
+            </span>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={generateQrToken}
+              loading={qrLoading}
+              icon={<RefreshIcon size={12} />}
+            >
+              RIGENERA QR
+            </Button>
+          </div>
 
           <div style={{ width: '100%', boxSizing: 'border-box' }}>
             <label
@@ -387,6 +521,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                 type="text"
                 readOnly
                 value={connectUrl}
+                placeholder="Generazione in corso..."
                 style={{
                   flex: 1,
                   padding: '8px 10px',
@@ -404,6 +539,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                 variant="secondary"
                 size="sm"
                 onClick={handleCopyConnectUrl}
+                disabled={!connectUrl}
                 icon={copied ? <CheckIcon size={14} color="#10B981" /> : <CopyIcon size={14} />}
               >
                 {copied ? 'COPIATO' : 'COPIA'}
@@ -412,6 +548,17 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
           </div>
         </div>
       </Modal>
+
+      {/* Integrated In-UI Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.action}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        submessage={confirmModal.submessage}
+        confirmLabel={confirmModal.confirmLabel}
+      />
     </div>
   );
 };
