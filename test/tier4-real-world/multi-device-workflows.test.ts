@@ -610,4 +610,184 @@ describe("Tier 4: Real-World Multi-Device Workflows Suite", () => {
     expect(adultsPull.body.deltas.favorites.some((f) => f.id === FIXTURE_ANIME_2.id)).toBe(false);
     expect(adultsPull.body.deltas.sharedSettings.preferredQuality).toBe("1080p");
   });
+
+  // ==========================================================================
+  // Scenario 7: Offline Modification Replication without Delta Miss (Timestamp Inversion & Tombstone Dominance)
+  // ==========================================================================
+  it("Scenario 7: Multi-device delta synchronization with offline clock skew (Timestamp Inversion fix) & defensive fallbacks", async () => {
+    // 1. Instance setup with single profile
+    const setupRes = await harness.post<{ ok: boolean; profileId: string }>("/api/setup", {
+      masterPassword: "MasterPassword123!",
+      initialProfileName: "Marco",
+    });
+    const profileId = setupRes.body.profileId;
+
+    // 2. Login Device A (Phone) and Device B (Tablet)
+    const devARes = await harness.post<{ ok: boolean; deviceToken: string }>("/api/auth/device-login", {
+      password: "MasterPassword123!",
+      profileId,
+      deviceName: "Pixel Phone",
+      platform: "android",
+    });
+    const tokenA = devARes.body.deviceToken;
+
+    const devBRes = await harness.post<{ ok: boolean; deviceToken: string }>("/api/auth/device-login", {
+      password: "MasterPassword123!",
+      profileId,
+      deviceName: "Galaxy Tablet",
+      platform: "android",
+    });
+    const tokenB = devBRes.body.deviceToken;
+
+    // 3. Step 1: Device A performs initial pull and records serverTime = T_A
+    harness.setBearerToken(tokenA);
+    const initialPullA = await harness.get<{ serverTime: number }>("/api/sync/pull?since=0");
+    expect(initialPullA.status).toBe(200);
+    const T_A = initialPullA.body.serverTime;
+    expect(typeof T_A).toBe("number");
+
+    // 4. Step 2: Device B records modifications offline with timestamp T_offline < T_A
+    // (both short offline e.g. 2 minutes and extended offline e.g. 45 days)
+    const T_offline = T_A - 120000; // 2 minutes before Device A's pull
+    const T_offline_45d = T_A - 45 * 24 * 60 * 60 * 1000; // 45 days before Device A's pull
+    harness.clearAuth();
+    harness.setBearerToken(tokenB);
+
+    // Push offline modifications across continue_watching, favorites, watch_history, watch_progress
+    // Also include partial/minimal payloads to verify defensive fallbacks (Zero HTTP 500)
+    const pushBRes = await harness.post<{ ok: boolean; appliedCount: number }>("/api/sync/push", {
+      favorites: [
+        {
+          id: "anime-offline-solo",
+          title: "Solo Leveling Offline",
+          updatedAt: T_offline,
+          // omitted thumbnail, link, genres, type to test defensive fallbacks
+        } as any,
+        {
+          id: "anime-offline-extended",
+          title: "Frieren 45 Days Offline",
+          updatedAt: T_offline_45d,
+        } as any,
+      ],
+      continueWatching: [
+        {
+          animeId: "anime-offline-solo",
+          episodeNumber: 11,
+          position: 1200,
+          updatedAt: T_offline,
+          // omitted title, thumbnail, episodeId, duration, percentage
+        } as any,
+      ],
+      watchHistory: [
+        {
+          animeId: "anime-offline-solo",
+          episodeNumber: 11,
+          updatedAt: T_offline,
+          // omitted title, thumbnail, episodeId, position, duration, progressPercent
+        } as any,
+      ],
+      watchProgress: [
+        {
+          animeId: "anime-offline-solo",
+          episodeNumber: 11,
+          currentTime: 1200,
+          updatedAt: T_offline,
+          // omitted animeTitle, thumbnail, episodeId, duration, percentage
+        } as any,
+      ],
+    });
+
+    expect(pushBRes.status).toBe(200);
+    expect(pushBRes.body.ok).toBe(true);
+
+    // 5. Step 3: Device A pulls delta using its cursor since = T_A
+    harness.clearAuth();
+    harness.setBearerToken(tokenA);
+    const deltaPullA = await harness.get<{
+      serverTime: number;
+      deltas: {
+        favorites: AnimeItem[];
+        continueWatching: ContinueWatchingItem[];
+        watchHistory: WatchHistoryItem[];
+        watchProgress: WatchProgressItem[];
+      };
+      tombstones: Array<{ type: string; key: string; deletedAt: number }>;
+    }>(`/api/sync/pull?since=${T_A}`);
+
+    expect(deltaPullA.status).toBe(200);
+
+    // Assertion 1: Device A MUST receive Device B's changes despite T_offline < T_A (no delta miss!)
+    const favItem = deltaPullA.body.deltas.favorites.find((f) => f.id === "anime-offline-solo");
+    expect(favItem).toBeDefined();
+    expect(favItem?.title).toBe("Solo Leveling Offline");
+    expect(favItem?.updatedAt).toBe(T_offline); // Client logical timestamp preserved
+
+    // Extended offline (45 days) MUST also be delivered to Device A (no arbitrary 30-day cutoff limitation)
+    const favExtended = deltaPullA.body.deltas.favorites.find((f) => f.id === "anime-offline-extended");
+    expect(favExtended).toBeDefined();
+    expect(favExtended?.title).toBe("Frieren 45 Days Offline");
+    expect(favExtended?.updatedAt).toBe(T_offline_45d);
+
+    const cwItem = deltaPullA.body.deltas.continueWatching.find((c) => c.animeId === "anime-offline-solo");
+    expect(cwItem).toBeDefined();
+    expect(cwItem?.episodeNumber).toBe(11);
+    expect(cwItem?.position).toBe(1200);
+    expect(cwItem?.updatedAt).toBe(T_offline);
+
+    const whItem = deltaPullA.body.deltas.watchHistory.find((w) => w.animeId === "anime-offline-solo");
+    expect(whItem).toBeDefined();
+    expect(whItem?.episodeNumber).toBe(11);
+    expect(whItem?.updatedAt).toBe(T_offline);
+
+    const wpItem = deltaPullA.body.deltas.watchProgress.find((p) => p.animeId === "anime-offline-solo");
+    expect(wpItem).toBeDefined();
+    expect(wpItem?.episodeNumber).toBe(11);
+    expect(wpItem?.currentTime).toBe(1200);
+    expect(wpItem?.updatedAt).toBe(T_offline);
+
+    // Update Device A's sync cursor to T_A2
+    const T_A2 = deltaPullA.body.serverTime;
+
+    // 6. Step 4: Device B deletes an item offline with deletedAt < T_A2 (extended offline deletion 45 days in past)
+    const T_del_offline = T_A2 - 45 * 24 * 60 * 60 * 1000; // 45 days in the past
+    harness.clearAuth();
+    harness.setBearerToken(tokenB);
+
+    const pushDelRes = await harness.post<{ ok: boolean }>("/api/sync/push", {
+      deletions: [
+        {
+          type: "continue_watching",
+          key: "anime-offline-solo",
+          deletedAt: T_del_offline,
+        },
+      ],
+    });
+    expect(pushDelRes.status).toBe(200);
+
+    // 7. Step 5: Device A executes delta pull with since = T_A2
+    harness.clearAuth();
+    harness.setBearerToken(tokenA);
+    const deltaPullDelA = await harness.get<{
+      serverTime: number;
+      deltas: any;
+      tombstones: Array<{ type: string; key: string; deletedAt: number }>;
+    }>(`/api/sync/pull?since=${T_A2}`);
+
+    expect(deltaPullDelA.status).toBe(200);
+
+    // Assertion 2: Device A MUST receive the tombstone despite deletedAt < T_A2
+    const cwTomb = deltaPullDelA.body.tombstones.find(
+      (t) => t.type === "continue_watching" && t.key === "anime-offline-solo"
+    );
+    expect(cwTomb).toBeDefined();
+    expect(cwTomb?.deletedAt).toBe(T_del_offline);
+
+    // Verify continue_watching active row is gone
+    const activeCw = await env.DB.prepare(
+      "SELECT * FROM continue_watching WHERE profile_id = ? AND anime_id = 'anime-offline-solo'"
+    )
+      .bind(profileId)
+      .first();
+    expect(activeCw).toBeNull();
+  });
 });

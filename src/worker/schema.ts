@@ -65,6 +65,7 @@ export interface FavoriteRecord {
   link: string;
   sub_or_dub: string | null;
   updated_at: number;
+  server_updated_at: number;
 }
 
 export interface ContinueWatchingRecord {
@@ -83,6 +84,7 @@ export interface ContinueWatchingRecord {
   is_caught_up: number; // 0 | 1
   last_checked_at: number | null;
   updated_at: number;
+  server_updated_at: number;
 }
 
 export interface WatchHistoryRecord {
@@ -99,6 +101,7 @@ export interface WatchHistoryRecord {
   data_id: string | null;
   server_id: string | null;
   updated_at: number;
+  server_updated_at: number;
 }
 
 export interface WatchProgressRecord {
@@ -116,6 +119,7 @@ export interface WatchProgressRecord {
   data_id: string | null;
   server_id: string | null;
   updated_at: number;
+  server_updated_at: number;
 }
 
 export interface SharedSettingRecord {
@@ -123,6 +127,7 @@ export interface SharedSettingRecord {
   key: string;
   value_json: string;
   updated_at: number;
+  server_updated_at: number;
 }
 
 export type TombstoneEntityType =
@@ -138,6 +143,7 @@ export interface TombstoneRecord {
   entity_type: TombstoneEntityType;
   entity_key: string;
   deleted_at: number;
+  server_deleted_at: number;
 }
 
 export const INIT_SCHEMA_SQL = `
@@ -199,6 +205,7 @@ CREATE TABLE IF NOT EXISTS favorites (
   link TEXT NOT NULL DEFAULT '',
   sub_or_dub TEXT,
   updated_at INTEGER NOT NULL,
+  server_updated_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (profile_id, anime_id)
 );
 
@@ -218,6 +225,7 @@ CREATE TABLE IF NOT EXISTS continue_watching (
   is_caught_up INTEGER NOT NULL DEFAULT 0 CHECK(is_caught_up IN (0, 1)),
   last_checked_at INTEGER,
   updated_at INTEGER NOT NULL,
+  server_updated_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (profile_id, anime_id)
 );
 
@@ -235,6 +243,7 @@ CREATE TABLE IF NOT EXISTS watch_history (
   data_id TEXT,
   server_id TEXT,
   updated_at INTEGER NOT NULL,
+  server_updated_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (profile_id, anime_id, episode_number)
 );
 
@@ -253,6 +262,7 @@ CREATE TABLE IF NOT EXISTS watch_progress (
   data_id TEXT,
   server_id TEXT,
   updated_at INTEGER NOT NULL,
+  server_updated_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (profile_id, anime_id, episode_number)
 );
 
@@ -261,6 +271,7 @@ CREATE TABLE IF NOT EXISTS shared_settings (
   key TEXT NOT NULL,
   value_json TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
+  server_updated_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (profile_id, key)
 );
 
@@ -269,6 +280,7 @@ CREATE TABLE IF NOT EXISTS tombstones (
   entity_type TEXT NOT NULL CHECK(entity_type IN ('favorite', 'continue_watching', 'watch_history', 'watch_progress', 'shared_settings', 'search_history')),
   entity_key TEXT NOT NULL,
   deleted_at INTEGER NOT NULL,
+  server_deleted_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (profile_id, entity_type, entity_key)
 );
 
@@ -276,13 +288,13 @@ CREATE INDEX IF NOT EXISTS idx_devices_profile_id ON devices(profile_id);
 CREATE INDEX IF NOT EXISTS idx_devices_token_hash ON devices(token_hash);
 CREATE INDEX IF NOT EXISTS idx_pairing_codes_expires_at ON pairing_codes(expires_at);
 CREATE INDEX IF NOT EXISTS idx_pairing_codes_status ON pairing_codes(status);
-CREATE INDEX IF NOT EXISTS idx_favorites_profile_updated ON favorites(profile_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_continue_watching_profile_updated ON continue_watching(profile_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_favorites_profile_updated ON favorites(profile_id, server_updated_at);
+CREATE INDEX IF NOT EXISTS idx_continue_watching_profile_updated ON continue_watching(profile_id, server_updated_at);
 CREATE INDEX IF NOT EXISTS idx_continue_watching_caught_up ON continue_watching(profile_id, is_caught_up);
-CREATE INDEX IF NOT EXISTS idx_watch_history_profile_updated ON watch_history(profile_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_watch_progress_profile_updated ON watch_progress(profile_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_shared_settings_profile_updated ON shared_settings(profile_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_tombstones_profile_deleted ON tombstones(profile_id, deleted_at);
+CREATE INDEX IF NOT EXISTS idx_watch_history_profile_updated ON watch_history(profile_id, server_updated_at);
+CREATE INDEX IF NOT EXISTS idx_watch_progress_profile_updated ON watch_progress(profile_id, server_updated_at);
+CREATE INDEX IF NOT EXISTS idx_shared_settings_profile_updated ON shared_settings(profile_id, server_updated_at);
+CREATE INDEX IF NOT EXISTS idx_tombstones_profile_deleted ON tombstones(profile_id, server_deleted_at);
 CREATE INDEX IF NOT EXISTS idx_tombstones_deleted_at ON tombstones(deleted_at);
 `;
 

@@ -115,9 +115,9 @@ backupRouter.post("/sync/import", async (c) => {
       c.env.DB.prepare(`
         INSERT INTO favorites (
           profile_id, anime_id, title, japanese_title, thumbnail, type,
-          release_year, status, total_episodes, genres_json, link, sub_or_dub, updated_at
+          release_year, status, total_episodes, genres_json, link, sub_or_dub, updated_at, server_updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(profile_id, anime_id) DO UPDATE SET
           title = excluded.title,
           japanese_title = excluded.japanese_title,
@@ -129,21 +129,23 @@ backupRouter.post("/sync/import", async (c) => {
           genres_json = excluded.genres_json,
           link = excluded.link,
           sub_or_dub = excluded.sub_or_dub,
-          updated_at = excluded.updated_at
+          updated_at = excluded.updated_at,
+          server_updated_at = excluded.server_updated_at
       `).bind(
         f.profile_id,
         f.anime_id,
-        f.title,
+        f.title || "Anime",
         f.japanese_title || null,
-        f.thumbnail,
+        f.thumbnail || "",
         f.type || "TV",
         f.release_year || null,
         f.status || null,
         f.total_episodes ? String(f.total_episodes) : null,
         f.genres_json || "[]",
-        f.link,
+        f.link || "",
         f.sub_or_dub || "SUB",
-        f.updated_at || Date.now()
+        f.updated_at || Date.now(),
+        f.server_updated_at || f.updated_at || Date.now()
       )
     );
   }
@@ -155,9 +157,9 @@ backupRouter.post("/sync/import", async (c) => {
         INSERT INTO continue_watching (
           profile_id, anime_id, title, thumbnail, episode_id, episode_number,
           total_episodes, position, duration, percentage, is_caught_up,
-          last_checked_at, updated_at, data_id, server_id
+          last_checked_at, updated_at, server_updated_at, data_id, server_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(profile_id, anime_id) DO UPDATE SET
           title = excluded.title,
           thumbnail = excluded.thumbnail,
@@ -170,22 +172,24 @@ backupRouter.post("/sync/import", async (c) => {
           is_caught_up = excluded.is_caught_up,
           last_checked_at = excluded.last_checked_at,
           updated_at = excluded.updated_at,
+          server_updated_at = excluded.server_updated_at,
           data_id = excluded.data_id,
           server_id = excluded.server_id
       `).bind(
         cw.profile_id,
         cw.anime_id,
-        cw.title,
-        cw.thumbnail,
-        cw.episode_id,
-        cw.episode_number,
+        cw.title || "Anime",
+        cw.thumbnail || "",
+        cw.episode_id || "",
+        cw.episode_number ?? 1,
         cw.total_episodes || null,
-        cw.position,
-        cw.duration,
-        cw.percentage,
+        cw.position ?? 0,
+        cw.duration ?? 0,
+        cw.percentage ?? 0,
         cw.is_caught_up || 0,
         cw.last_checked_at || Date.now(),
         cw.updated_at || Date.now(),
+        cw.server_updated_at || cw.updated_at || Date.now(),
         cw.data_id || null,
         cw.server_id || null
       )
@@ -198,9 +202,9 @@ backupRouter.post("/sync/import", async (c) => {
       c.env.DB.prepare(`
         INSERT INTO watch_history (
           profile_id, anime_id, episode_number, episode_id, title, thumbnail,
-          position, duration, progress_percent, is_completed, data_id, server_id, updated_at
+          position, duration, progress_percent, is_completed, data_id, server_id, updated_at, server_updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(profile_id, anime_id, episode_number) DO UPDATE SET
           episode_id = excluded.episode_id,
           title = excluded.title,
@@ -211,21 +215,23 @@ backupRouter.post("/sync/import", async (c) => {
           is_completed = excluded.is_completed,
           data_id = excluded.data_id,
           server_id = excluded.server_id,
-          updated_at = excluded.updated_at
+          updated_at = excluded.updated_at,
+          server_updated_at = excluded.server_updated_at
       `).bind(
         wh.profile_id,
         wh.anime_id,
-        wh.episode_number,
-        wh.episode_id,
-        wh.title,
-        wh.thumbnail,
-        wh.position,
-        wh.duration,
-        wh.progress_percent,
+        wh.episode_number ?? 1,
+        wh.episode_id || "",
+        wh.title || "Anime",
+        wh.thumbnail || "",
+        wh.position ?? 0,
+        wh.duration ?? 0,
+        wh.progress_percent ?? 0,
         wh.is_completed || 0,
         wh.data_id || null,
         wh.server_id || null,
-        wh.updated_at || Date.now()
+        wh.updated_at || Date.now(),
+        wh.server_updated_at || wh.updated_at || Date.now()
       )
     );
   }
@@ -237,9 +243,9 @@ backupRouter.post("/sync/import", async (c) => {
         INSERT INTO watch_progress (
           profile_id, anime_id, episode_number, anime_title, thumbnail,
           episode_id, total_episodes, "current_time", duration, percentage,
-          is_completed, data_id, server_id, updated_at
+          is_completed, data_id, server_id, updated_at, server_updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(profile_id, anime_id, episode_number) DO UPDATE SET
           anime_title = excluded.anime_title,
           thumbnail = excluded.thumbnail,
@@ -251,22 +257,24 @@ backupRouter.post("/sync/import", async (c) => {
           is_completed = excluded.is_completed,
           data_id = excluded.data_id,
           server_id = excluded.server_id,
-          updated_at = excluded.updated_at
+          updated_at = excluded.updated_at,
+          server_updated_at = excluded.server_updated_at
       `).bind(
         wp.profile_id,
         wp.anime_id,
-        wp.episode_number,
-        wp.anime_title,
-        wp.thumbnail,
-        wp.episode_id,
+        wp.episode_number ?? 1,
+        wp.anime_title || "Anime",
+        wp.thumbnail || "",
+        wp.episode_id || "",
         wp.total_episodes || null,
-        wp.current_time,
-        wp.duration,
-        wp.percentage,
+        wp.current_time ?? 0,
+        wp.duration ?? 0,
+        wp.percentage ?? 0,
         wp.is_completed || 0,
         wp.data_id || null,
         wp.server_id || null,
-        wp.updated_at || Date.now()
+        wp.updated_at || Date.now(),
+        wp.server_updated_at || wp.updated_at || Date.now()
       )
     );
   }
@@ -275,12 +283,19 @@ backupRouter.post("/sync/import", async (c) => {
   for (const ss of sharedSettings) {
     statements.push(
       c.env.DB.prepare(`
-        INSERT INTO shared_settings (profile_id, key, value_json, updated_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO shared_settings (profile_id, key, value_json, updated_at, server_updated_at)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(profile_id, key) DO UPDATE SET
           value_json = excluded.value_json,
-          updated_at = excluded.updated_at
-      `).bind(ss.profile_id, ss.key, ss.value_json, ss.updated_at || Date.now())
+          updated_at = excluded.updated_at,
+          server_updated_at = excluded.server_updated_at
+      `).bind(
+        ss.profile_id,
+        ss.key,
+        ss.value_json,
+        ss.updated_at || Date.now(),
+        ss.server_updated_at || ss.updated_at || Date.now()
+      )
     );
   }
 
@@ -288,11 +303,18 @@ backupRouter.post("/sync/import", async (c) => {
   for (const t of tombstones) {
     statements.push(
       c.env.DB.prepare(`
-        INSERT INTO tombstones (profile_id, entity_type, entity_key, deleted_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO tombstones (profile_id, entity_type, entity_key, deleted_at, server_deleted_at)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(profile_id, entity_type, entity_key) DO UPDATE SET
-          deleted_at = excluded.deleted_at
-      `).bind(t.profile_id, t.entity_type, t.entity_key, t.deleted_at || Date.now())
+          deleted_at = excluded.deleted_at,
+          server_deleted_at = excluded.server_deleted_at
+      `).bind(
+        t.profile_id,
+        t.entity_type,
+        t.entity_key,
+        t.deleted_at || Date.now(),
+        t.server_deleted_at || t.deleted_at || Date.now()
+      )
     );
   }
 

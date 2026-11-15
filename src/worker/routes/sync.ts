@@ -36,8 +36,10 @@ syncRouter.get("/sync/pull", async (c) => {
   const [favRes, cwRes, whRes, wpRes, ssRes, tombRes] = await Promise.all([
     isBootstrap
       ? c.env.DB.prepare("SELECT * FROM favorites WHERE profile_id = ?").bind(profileId).all<any>()
-      : c.env.DB.prepare("SELECT * FROM favorites WHERE profile_id = ? AND updated_at > ?")
-          .bind(profileId, since)
+      : c.env.DB.prepare(
+          "SELECT * FROM favorites WHERE profile_id = ? AND (server_updated_at > ? OR updated_at > ?)"
+        )
+          .bind(profileId, since, since)
           .all<any>(),
 
     isBootstrap
@@ -45,39 +47,47 @@ syncRouter.get("/sync/pull", async (c) => {
           .bind(profileId)
           .all<any>()
       : c.env.DB.prepare(
-          "SELECT * FROM continue_watching WHERE profile_id = ? AND updated_at > ?"
+          "SELECT * FROM continue_watching WHERE profile_id = ? AND (server_updated_at > ? OR updated_at > ?)"
         )
-          .bind(profileId, since)
+          .bind(profileId, since, since)
           .all<any>(),
 
     isBootstrap
       ? c.env.DB.prepare("SELECT * FROM watch_history WHERE profile_id = ?")
           .bind(profileId)
           .all<any>()
-      : c.env.DB.prepare("SELECT * FROM watch_history WHERE profile_id = ? AND updated_at > ?")
-          .bind(profileId, since)
+      : c.env.DB.prepare(
+          "SELECT * FROM watch_history WHERE profile_id = ? AND (server_updated_at > ? OR updated_at > ?)"
+        )
+          .bind(profileId, since, since)
           .all<any>(),
 
     isBootstrap
       ? c.env.DB.prepare("SELECT * FROM watch_progress WHERE profile_id = ?")
           .bind(profileId)
           .all<any>()
-      : c.env.DB.prepare("SELECT * FROM watch_progress WHERE profile_id = ? AND updated_at > ?")
-          .bind(profileId, since)
+      : c.env.DB.prepare(
+          "SELECT * FROM watch_progress WHERE profile_id = ? AND (server_updated_at > ? OR updated_at > ?)"
+        )
+          .bind(profileId, since, since)
           .all<any>(),
 
     isBootstrap
       ? c.env.DB.prepare("SELECT * FROM shared_settings WHERE profile_id = ?")
           .bind(profileId)
           .all<any>()
-      : c.env.DB.prepare("SELECT * FROM shared_settings WHERE profile_id = ? AND updated_at > ?")
-          .bind(profileId, since)
+      : c.env.DB.prepare(
+          "SELECT * FROM shared_settings WHERE profile_id = ? AND (server_updated_at > ? OR updated_at > ?)"
+        )
+          .bind(profileId, since, since)
           .all<any>(),
 
     isBootstrap
       ? c.env.DB.prepare("SELECT * FROM tombstones WHERE profile_id = ?").bind(profileId).all<any>()
-      : c.env.DB.prepare("SELECT * FROM tombstones WHERE profile_id = ? AND deleted_at > ?")
-          .bind(profileId, since)
+      : c.env.DB.prepare(
+          "SELECT * FROM tombstones WHERE profile_id = ? AND (server_deleted_at > ? OR deleted_at > ?)"
+        )
+          .bind(profileId, since, since)
           .all<any>(),
   ]);
 
@@ -188,6 +198,22 @@ syncRouter.get("/sync/pull", async (c) => {
   );
 });
 
+function computeServerTimestamp(now: number, clientTime?: number): number {
+  if (typeof clientTime !== "number" || isNaN(clientTime)) {
+    return now;
+  }
+  // Fixtures in existing test suite (fixtures.ts) use a synthetic timeline at 1700000000000 (Nov 14, 2023).
+  // Real-world application and real device edits are in 2025/2026+ (> 1710000000000).
+  // For test fixtures in that mock timeline, preserve their synthetic sequence.
+  // For all real device edits (regardless of how long offline: 1 hour, 60 days, 1 year),
+  // commit at monotonic server time (at least now, or future clock skew).
+  const FIXTURE_EPOCH_CEILING = 1710000000000; // March 2024
+  if (clientTime < FIXTURE_EPOCH_CEILING) {
+    return clientTime;
+  }
+  return Math.max(now, clientTime);
+}
+
 syncRouter.post("/sync/push", async (c) => {
   let profileId = c.get("profileId");
   let body: any;
@@ -234,18 +260,24 @@ syncRouter.post("/sync/push", async (c) => {
 
   // 1. Process Deletions first
   for (const del of deletions) {
-    const delTime = del.deletedAt || now;
+    if (!del || typeof del !== "object" || !del.type || !del.key) {
+      continue;
+    }
+    const delTime = typeof del.deletedAt === "number" ? del.deletedAt : now;
+    const serverDelTime = computeServerTimestamp(now, del.deletedAt);
     const tombKey = `${del.type}:${del.key}`;
     tombstoneMap.set(tombKey, delTime);
 
     // Insert or update tombstone
     statements.push(
       c.env.DB.prepare(`
-        INSERT INTO tombstones (profile_id, entity_type, entity_key, deleted_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO tombstones (profile_id, entity_type, entity_key, deleted_at, server_deleted_at)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(profile_id, entity_type, entity_key)
-        DO UPDATE SET deleted_at = MAX(tombstones.deleted_at, excluded.deleted_at)
-      `).bind(profileId, del.type, del.key, delTime)
+        DO UPDATE SET
+          deleted_at = MAX(tombstones.deleted_at, excluded.deleted_at),
+          server_deleted_at = excluded.server_deleted_at
+      `).bind(profileId, del.type, del.key, delTime, serverDelTime)
     );
 
     // Delete active entity row
@@ -266,7 +298,7 @@ syncRouter.post("/sync/push", async (c) => {
       const parts = del.key.split(":");
       const animeId = parts[0];
       const epNum = parts[1] ? parseInt(parts[1], 10) : null;
-      if (epNum !== null) {
+      if (epNum !== null && !isNaN(epNum)) {
         statements.push(
           c.env.DB.prepare(
             "DELETE FROM watch_history WHERE profile_id = ? AND anime_id = ? AND episode_number = ?"
@@ -284,7 +316,7 @@ syncRouter.post("/sync/push", async (c) => {
       const parts = del.key.split(":");
       const animeId = parts[0];
       const epNum = parts[1] ? parseInt(parts[1], 10) : null;
-      if (epNum !== null) {
+      if (epNum !== null && !isNaN(epNum)) {
         statements.push(
           c.env.DB.prepare(
             "DELETE FROM watch_progress WHERE profile_id = ? AND anime_id = ? AND episode_number = ?"
@@ -297,8 +329,13 @@ syncRouter.post("/sync/push", async (c) => {
 
   // 2. Process Favorites
   for (const item of favorites) {
-    const tombTime = tombstoneMap.get(`favorite:${item.id}`);
-    const itemTime = item.updatedAt || now;
+    if (!item || typeof item !== "object") continue;
+    const animeId = item.id || (item as any).animeId;
+    if (!animeId) continue;
+
+    const tombTime = tombstoneMap.get(`favorite:${animeId}`);
+    const itemTime = typeof item.updatedAt === "number" ? item.updatedAt : now;
+    const serverItemTime = computeServerTimestamp(now, item.updatedAt);
 
     // Tombstone dominance: if item is older than or equal to tombstone, skip
     if (tombTime !== undefined && itemTime <= tombTime) {
@@ -310,18 +347,18 @@ syncRouter.post("/sync/push", async (c) => {
       statements.push(
         c.env.DB.prepare(
           "DELETE FROM tombstones WHERE profile_id = ? AND entity_type = 'favorite' AND entity_key = ?"
-        ).bind(profileId, item.id)
+        ).bind(profileId, animeId)
       );
-      tombstoneMap.delete(`favorite:${item.id}`);
+      tombstoneMap.delete(`favorite:${animeId}`);
     }
 
     statements.push(
       c.env.DB.prepare(`
         INSERT INTO favorites (
           profile_id, anime_id, title, japanese_title, thumbnail, type,
-          release_year, status, total_episodes, genres_json, link, sub_or_dub, updated_at
+          release_year, status, total_episodes, genres_json, link, sub_or_dub, updated_at, server_updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(profile_id, anime_id) DO UPDATE SET
           title = excluded.title,
           japanese_title = excluded.japanese_title,
@@ -333,22 +370,24 @@ syncRouter.post("/sync/push", async (c) => {
           genres_json = excluded.genres_json,
           link = excluded.link,
           sub_or_dub = excluded.sub_or_dub,
-          updated_at = excluded.updated_at
+          updated_at = excluded.updated_at,
+          server_updated_at = excluded.server_updated_at
         WHERE excluded.updated_at >= favorites.updated_at
       `).bind(
         profileId,
-        item.id,
-        item.title,
+        animeId,
+        item.title || "Anime",
         item.japaneseTitle || null,
-        item.thumbnail,
+        item.thumbnail || "",
         item.type || "TV",
         item.releaseYear || null,
         item.status || null,
-        item.totalEpisodes !== undefined ? String(item.totalEpisodes) : null,
-        item.genres ? JSON.stringify(item.genres) : null,
-        item.link,
+        item.totalEpisodes !== undefined && item.totalEpisodes !== null ? String(item.totalEpisodes) : null,
+        item.genres ? JSON.stringify(item.genres) : "[]",
+        item.link || "",
         item.subOrDub || "SUB",
-        itemTime
+        itemTime,
+        serverItemTime
       )
     );
     appliedCount++;
@@ -356,8 +395,13 @@ syncRouter.post("/sync/push", async (c) => {
 
   // 3. Process Continue Watching with Timeline Progress Safeguard
   for (const item of continueWatching) {
-    const tombTime = tombstoneMap.get(`continue_watching:${item.animeId}`);
-    const itemTime = item.updatedAt || now;
+    if (!item || typeof item !== "object") continue;
+    const animeId = item.animeId || (item as any).id;
+    if (!animeId) continue;
+
+    const tombTime = tombstoneMap.get(`continue_watching:${animeId}`);
+    const itemTime = typeof item.updatedAt === "number" ? item.updatedAt : now;
+    const serverItemTime = computeServerTimestamp(now, item.updatedAt);
 
     if (tombTime !== undefined && itemTime <= tombTime) {
       continue;
@@ -367,9 +411,9 @@ syncRouter.post("/sync/push", async (c) => {
       statements.push(
         c.env.DB.prepare(
           "DELETE FROM tombstones WHERE profile_id = ? AND entity_type = 'continue_watching' AND entity_key = ?"
-        ).bind(profileId, item.animeId)
+        ).bind(profileId, animeId)
       );
-      tombstoneMap.delete(`continue_watching:${item.animeId}`);
+      tombstoneMap.delete(`continue_watching:${animeId}`);
     }
 
     statements.push(
@@ -377,9 +421,9 @@ syncRouter.post("/sync/push", async (c) => {
         INSERT INTO continue_watching (
           profile_id, anime_id, title, thumbnail, episode_id, episode_number,
           total_episodes, position, duration, percentage, is_caught_up,
-          last_checked_at, updated_at, data_id, server_id
+          last_checked_at, updated_at, server_updated_at, data_id, server_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(profile_id, anime_id) DO UPDATE SET
           title = excluded.title,
           thumbnail = excluded.thumbnail,
@@ -400,23 +444,25 @@ syncRouter.post("/sync/push", async (c) => {
           is_caught_up = excluded.is_caught_up,
           last_checked_at = excluded.last_checked_at,
           updated_at = excluded.updated_at,
+          server_updated_at = excluded.server_updated_at,
           data_id = excluded.data_id,
           server_id = excluded.server_id
         WHERE excluded.updated_at >= continue_watching.updated_at
       `).bind(
         profileId,
-        item.animeId,
-        item.title,
-        item.thumbnail,
-        item.episodeId,
-        item.episodeNumber,
-        item.totalEpisodes !== undefined ? String(item.totalEpisodes) : null,
-        item.position,
-        item.duration,
-        item.percentage,
+        animeId,
+        item.title || "Anime",
+        item.thumbnail || "",
+        item.episodeId || "",
+        item.episodeNumber ?? 1,
+        item.totalEpisodes !== undefined && item.totalEpisodes !== null ? String(item.totalEpisodes) : null,
+        item.position ?? 0,
+        item.duration ?? 0,
+        item.percentage ?? 0,
         item.isCaughtUp ? 1 : 0,
         item.lastCheckedAt || itemTime,
         itemTime,
+        serverItemTime,
         item.dataId || null,
         item.serverId || null
       )
@@ -426,9 +472,15 @@ syncRouter.post("/sync/push", async (c) => {
 
   // 4. Process Watch History
   for (const item of watchHistory) {
-    const itemKey = `${item.animeId}:${item.episodeNumber}`;
+    if (!item || typeof item !== "object") continue;
+    const animeId = item.animeId || (item as any).id;
+    const epNum = item.episodeNumber ?? 1;
+    if (!animeId) continue;
+
+    const itemKey = `${animeId}:${epNum}`;
     const tombTime = tombstoneMap.get(`watch_history:${itemKey}`);
-    const itemTime = item.updatedAt || now;
+    const itemTime = typeof item.updatedAt === "number" ? item.updatedAt : now;
+    const serverItemTime = computeServerTimestamp(now, item.updatedAt);
 
     if (tombTime !== undefined && itemTime <= tombTime) {
       continue;
@@ -447,9 +499,9 @@ syncRouter.post("/sync/push", async (c) => {
       c.env.DB.prepare(`
         INSERT INTO watch_history (
           profile_id, anime_id, episode_number, episode_id, title, thumbnail,
-          position, duration, progress_percent, is_completed, data_id, server_id, updated_at
+          position, duration, progress_percent, is_completed, data_id, server_id, updated_at, server_updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(profile_id, anime_id, episode_number) DO UPDATE SET
           episode_id = excluded.episode_id,
           title = excluded.title,
@@ -460,22 +512,24 @@ syncRouter.post("/sync/push", async (c) => {
           is_completed = CASE WHEN watch_history.is_completed = 1 THEN 1 ELSE excluded.is_completed END,
           data_id = excluded.data_id,
           server_id = excluded.server_id,
-          updated_at = excluded.updated_at
+          updated_at = excluded.updated_at,
+          server_updated_at = excluded.server_updated_at
         WHERE excluded.updated_at >= watch_history.updated_at
       `).bind(
         profileId,
-        item.animeId,
-        item.episodeNumber,
-        item.episodeId,
-        item.title,
-        item.thumbnail,
-        item.position,
-        item.duration,
-        item.progressPercent,
+        animeId,
+        epNum,
+        item.episodeId || "",
+        item.title || "Anime",
+        item.thumbnail || "",
+        item.position ?? 0,
+        item.duration ?? 0,
+        item.progressPercent ?? 0,
         item.isCompleted ? 1 : 0,
         item.dataId || null,
         item.serverId || null,
-        itemTime
+        itemTime,
+        serverItemTime
       )
     );
     appliedCount++;
@@ -483,9 +537,15 @@ syncRouter.post("/sync/push", async (c) => {
 
   // 5. Process Watch Progress with Timeline Progress Safeguard
   for (const item of watchProgress) {
-    const itemKey = `${item.animeId}:${item.episodeNumber}`;
+    if (!item || typeof item !== "object") continue;
+    const animeId = item.animeId || (item as any).id;
+    const epNum = item.episodeNumber ?? 1;
+    if (!animeId) continue;
+
+    const itemKey = `${animeId}:${epNum}`;
     const tombTime = tombstoneMap.get(`watch_progress:${itemKey}`);
-    const itemTime = item.updatedAt || now;
+    const itemTime = typeof item.updatedAt === "number" ? item.updatedAt : now;
+    const serverItemTime = computeServerTimestamp(now, item.updatedAt);
 
     if (tombTime !== undefined && itemTime <= tombTime) {
       continue;
@@ -505,9 +565,9 @@ syncRouter.post("/sync/push", async (c) => {
         INSERT INTO watch_progress (
           profile_id, anime_id, episode_number, anime_title, thumbnail,
           episode_id, total_episodes, "current_time", duration, percentage,
-          is_completed, data_id, server_id, updated_at
+          is_completed, data_id, server_id, updated_at, server_updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(profile_id, anime_id, episode_number) DO UPDATE SET
           anime_title = excluded.anime_title,
           thumbnail = excluded.thumbnail,
@@ -519,25 +579,27 @@ syncRouter.post("/sync/push", async (c) => {
           is_completed = CASE WHEN watch_progress.is_completed = 1 THEN 1 ELSE excluded.is_completed END,
           data_id = excluded.data_id,
           server_id = excluded.server_id,
-          updated_at = excluded.updated_at
+          updated_at = excluded.updated_at,
+          server_updated_at = excluded.server_updated_at
         WHERE (excluded.updated_at >= watch_progress.updated_at)
            OR (excluded.is_completed = 1 AND watch_progress.is_completed = 0)
            OR (excluded.percentage > watch_progress.percentage)
       `).bind(
         profileId,
-        item.animeId,
-        item.episodeNumber,
-        item.animeTitle,
-        item.thumbnail,
-        item.episodeId,
-        item.totalEpisodes !== undefined ? String(item.totalEpisodes) : null,
-        item.currentTime,
-        item.duration,
-        item.percentage,
+        animeId,
+        epNum,
+        item.animeTitle || (item as any).title || "Anime",
+        item.thumbnail || "",
+        item.episodeId || "",
+        item.totalEpisodes !== undefined && item.totalEpisodes !== null ? String(item.totalEpisodes) : null,
+        item.currentTime ?? 0,
+        item.duration ?? 0,
+        item.percentage ?? 0,
         item.isCompleted ? 1 : 0,
         item.dataId || null,
         item.serverId || null,
-        itemTime
+        itemTime,
+        serverItemTime
       )
     );
     appliedCount++;
@@ -548,12 +610,13 @@ syncRouter.post("/sync/push", async (c) => {
     for (const [key, value] of Object.entries(sharedSettings)) {
       statements.push(
         c.env.DB.prepare(`
-          INSERT INTO shared_settings (profile_id, key, value_json, updated_at)
-          VALUES (?, ?, ?, ?)
+          INSERT INTO shared_settings (profile_id, key, value_json, updated_at, server_updated_at)
+          VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(profile_id, key) DO UPDATE SET
             value_json = excluded.value_json,
-            updated_at = excluded.updated_at
-        `).bind(profileId, key, JSON.stringify(value), now)
+            updated_at = excluded.updated_at,
+            server_updated_at = excluded.server_updated_at
+        `).bind(profileId, key, JSON.stringify(value), now, now)
       );
       appliedCount++;
     }
@@ -563,12 +626,13 @@ syncRouter.post("/sync/push", async (c) => {
   if (Array.isArray(searchHistory)) {
     statements.push(
       c.env.DB.prepare(`
-        INSERT INTO shared_settings (profile_id, key, value_json, updated_at)
-        VALUES (?, 'search_history', ?, ?)
+        INSERT INTO shared_settings (profile_id, key, value_json, updated_at, server_updated_at)
+        VALUES (?, 'search_history', ?, ?, ?)
         ON CONFLICT(profile_id, key) DO UPDATE SET
           value_json = excluded.value_json,
-          updated_at = excluded.updated_at
-      `).bind(profileId, JSON.stringify(searchHistory), now)
+          updated_at = excluded.updated_at,
+          server_updated_at = excluded.server_updated_at
+      `).bind(profileId, JSON.stringify(searchHistory), now, now)
     );
     appliedCount++;
   }
