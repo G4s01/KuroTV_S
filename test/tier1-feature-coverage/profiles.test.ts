@@ -199,6 +199,9 @@ describe("Tier 1: Profile Management (GET/POST/PUT/DELETE /api/profiles)", () =>
         "INSERT INTO shared_settings (profile_id, key, value_json, updated_at) VALUES (?, 'prefQuality', '\"1080p\"', ?)"
       ).bind(targetId, now),
       env.DB.prepare(
+        "INSERT INTO mal_auth (profile_id, client_id, access_token, refresh_token, expires_at, token_type, updated_at, server_updated_at) VALUES (?, 'cid-del', 'acc-del', 'ref-del', ?, 'Bearer', ?, ?)"
+      ).bind(targetId, now + 3600000, now, now),
+      env.DB.prepare(
         "INSERT INTO tombstones (profile_id, entity_type, entity_key, deleted_at) VALUES (?, 'favorite', 'old-del', ?)"
       ).bind(targetId, now),
       env.DB.prepare(
@@ -218,6 +221,7 @@ describe("Tier 1: Profile Management (GET/POST/PUT/DELETE /api/profiles)", () =>
     const whCount = await env.DB.prepare("SELECT count(*) as c FROM watch_history WHERE profile_id = ?").bind(targetId).first<{ c: number }>();
     const wpCount = await env.DB.prepare("SELECT count(*) as c FROM watch_progress WHERE profile_id = ?").bind(targetId).first<{ c: number }>();
     const ssCount = await env.DB.prepare("SELECT count(*) as c FROM shared_settings WHERE profile_id = ?").bind(targetId).first<{ c: number }>();
+    const malCount = await env.DB.prepare("SELECT count(*) as c FROM mal_auth WHERE profile_id = ?").bind(targetId).first<{ c: number }>();
     const tombCount = await env.DB.prepare("SELECT count(*) as c FROM tombstones WHERE profile_id = ?").bind(targetId).first<{ c: number }>();
     const devCount = await env.DB.prepare("SELECT count(*) as c FROM devices WHERE profile_id = ?").bind(targetId).first<{ c: number }>();
     const profCount = await env.DB.prepare("SELECT count(*) as c FROM profiles WHERE id = ?").bind(targetId).first<{ c: number }>();
@@ -227,6 +231,7 @@ describe("Tier 1: Profile Management (GET/POST/PUT/DELETE /api/profiles)", () =>
     expect(whCount?.c).toBe(0);
     expect(wpCount?.c).toBe(0);
     expect(ssCount?.c).toBe(0);
+    expect(malCount?.c).toBe(0);
     expect(tombCount?.c).toBe(0);
     expect(devCount?.c).toBe(0);
     expect(profCount?.c).toBe(0);

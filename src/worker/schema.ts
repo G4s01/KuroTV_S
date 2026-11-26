@@ -130,13 +130,28 @@ export interface SharedSettingRecord {
   server_updated_at: number;
 }
 
+export interface MalAuthRecord {
+  profile_id: string;
+  client_id: string;
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+  token_type: string;
+  username: string | null;
+  user_id: number | null;
+  picture: string | null;
+  updated_at: number;
+  server_updated_at: number;
+}
+
 export type TombstoneEntityType =
   | 'favorite'
   | 'continue_watching'
   | 'watch_history'
   | 'watch_progress'
   | 'shared_settings'
-  | 'search_history';
+  | 'search_history'
+  | 'mal_auth';
 
 export interface TombstoneRecord {
   profile_id: string;
@@ -275,9 +290,23 @@ CREATE TABLE IF NOT EXISTS shared_settings (
   PRIMARY KEY (profile_id, key)
 );
 
+CREATE TABLE IF NOT EXISTS mal_auth (
+  profile_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+  client_id TEXT NOT NULL,
+  access_token TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  expires_at INTEGER NOT NULL DEFAULT 0,
+  token_type TEXT NOT NULL DEFAULT 'Bearer',
+  username TEXT,
+  user_id INTEGER,
+  picture TEXT,
+  updated_at INTEGER NOT NULL,
+  server_updated_at INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS tombstones (
   profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  entity_type TEXT NOT NULL CHECK(entity_type IN ('favorite', 'continue_watching', 'watch_history', 'watch_progress', 'shared_settings', 'search_history')),
+  entity_type TEXT NOT NULL CHECK(entity_type IN ('favorite', 'continue_watching', 'watch_history', 'watch_progress', 'shared_settings', 'search_history', 'mal_auth')),
   entity_key TEXT NOT NULL,
   deleted_at INTEGER NOT NULL,
   server_deleted_at INTEGER NOT NULL DEFAULT 0,
@@ -294,6 +323,7 @@ CREATE INDEX IF NOT EXISTS idx_continue_watching_caught_up ON continue_watching(
 CREATE INDEX IF NOT EXISTS idx_watch_history_profile_updated ON watch_history(profile_id, server_updated_at);
 CREATE INDEX IF NOT EXISTS idx_watch_progress_profile_updated ON watch_progress(profile_id, server_updated_at);
 CREATE INDEX IF NOT EXISTS idx_shared_settings_profile_updated ON shared_settings(profile_id, server_updated_at);
+CREATE INDEX IF NOT EXISTS idx_mal_auth_profile_updated ON mal_auth(profile_id, server_updated_at);
 CREATE INDEX IF NOT EXISTS idx_tombstones_profile_deleted ON tombstones(profile_id, server_deleted_at);
 CREATE INDEX IF NOT EXISTS idx_tombstones_deleted_at ON tombstones(deleted_at);
 `;

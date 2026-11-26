@@ -150,6 +150,7 @@ export class TestHarness {
 export async function clearDatabase(db: D1Database): Promise<void> {
   await db.batch([
     db.prepare("DELETE FROM tombstones"),
+    db.prepare("DELETE FROM mal_auth"),
     db.prepare("DELETE FROM shared_settings"),
     db.prepare("DELETE FROM watch_progress"),
     db.prepare("DELETE FROM watch_history"),

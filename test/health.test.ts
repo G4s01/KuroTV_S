@@ -10,6 +10,7 @@ describe("Milestone 1: D1 Schema & Health Route", () => {
     // Drop all tables to start each test in a clean state
     await env.DB.exec(`
       DROP TABLE IF EXISTS tombstones;
+      DROP TABLE IF EXISTS mal_auth;
       DROP TABLE IF EXISTS shared_settings;
       DROP TABLE IF EXISTS watch_progress;
       DROP TABLE IF EXISTS watch_history;
@@ -22,31 +23,31 @@ describe("Milestone 1: D1 Schema & Health Route", () => {
     `);
   });
 
-  it("ensureSchema idempotently creates all 10 tables and 12 indexes", async () => {
+  it("ensureSchema idempotently creates all 11 tables and 13 indexes", async () => {
     // Run schema creation first time
     await ensureSchema(env.DB);
 
-    // Verify all 10 tables exist
+    // Verify all 11 tables exist
     const tablesRes = await env.DB.prepare(
       "SELECT count(*) as count FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name != 'd1_migrations'"
     ).first<{ count: number }>();
-    expect(tablesRes?.count).toBe(10);
+    expect(tablesRes?.count).toBe(11);
 
-    // Verify all 12 custom indexes exist
+    // Verify all 13 custom indexes exist
     const indexesRes = await env.DB.prepare(
       "SELECT count(*) as count FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'"
     ).first<{ count: number }>();
-    expect(indexesRes?.count).toBe(12);
+    expect(indexesRes?.count).toBe(13);
 
     // Run schema creation second time to test idempotency
     resetSchemaInitCache();
     await expect(ensureSchema(env.DB)).resolves.not.toThrow();
 
-    // Verify count is still exactly 10 tables and 12 indexes
+    // Verify count is still exactly 11 tables and 13 indexes
     const tablesRes2 = await env.DB.prepare(
       "SELECT count(*) as count FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name != 'd1_migrations'"
     ).first<{ count: number }>();
-    expect(tablesRes2?.count).toBe(10);
+    expect(tablesRes2?.count).toBe(11);
   });
 
   it("GET /api/health returns initialized: false when no setup completed and no secret", async () => {

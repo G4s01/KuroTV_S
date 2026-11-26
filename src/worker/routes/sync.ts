@@ -8,6 +8,7 @@ import type {
   WatchHistoryItem,
   WatchProgressItem,
   SearchHistoryItem,
+  MalAuthSyncRecord,
 } from "@kurosync/sync-client";
 
 export const syncRouter = new Hono<AppEnv>();
@@ -33,7 +34,7 @@ syncRouter.get("/sync/pull", async (c) => {
   // Queries for deltas
   const isBootstrap = since <= 0;
 
-  const [favRes, cwRes, whRes, wpRes, ssRes, tombRes] = await Promise.all([
+  const [favRes, cwRes, whRes, wpRes, ssRes, malRes, tombRes] = await Promise.all([
     isBootstrap
       ? c.env.DB.prepare("SELECT * FROM favorites WHERE profile_id = ?").bind(profileId).all<any>()
       : c.env.DB.prepare(
@@ -81,6 +82,14 @@ syncRouter.get("/sync/pull", async (c) => {
         )
           .bind(profileId, since, since)
           .all<any>(),
+
+    isBootstrap
+      ? c.env.DB.prepare("SELECT * FROM mal_auth WHERE profile_id = ?").bind(profileId).first<any>()
+      : c.env.DB.prepare(
+          "SELECT * FROM mal_auth WHERE profile_id = ? AND (server_updated_at > ? OR updated_at > ?)"
+        )
+          .bind(profileId, since, since)
+          .first<any>(),
 
     isBootstrap
       ? c.env.DB.prepare("SELECT * FROM tombstones WHERE profile_id = ?").bind(profileId).all<any>()
@@ -174,6 +183,27 @@ syncRouter.get("/sync/pull", async (c) => {
     }
   }
 
+  const malAuth: MalAuthSyncRecord | null = malRes
+    ? {
+        profileId: malRes.profile_id,
+        clientId: malRes.client_id,
+        accessToken: malRes.access_token,
+        refreshToken: malRes.refresh_token,
+        expiresAt: Number(malRes.expires_at ?? 0),
+        tokenType: malRes.token_type || "Bearer",
+        ...(malRes.username !== null && malRes.username !== undefined
+          ? { username: malRes.username }
+          : {}),
+        ...(malRes.user_id !== null && malRes.user_id !== undefined
+          ? { userId: Number(malRes.user_id) }
+          : {}),
+        ...(malRes.picture !== null && malRes.picture !== undefined
+          ? { picture: malRes.picture }
+          : {}),
+        updatedAt: Number(malRes.updated_at),
+      }
+    : null;
+
   const tombstones = (tombRes.results || []).map((row: any) => ({
     type: row.entity_type,
     key: row.entity_key,
@@ -191,6 +221,7 @@ syncRouter.get("/sync/pull", async (c) => {
         watchProgress,
         sharedSettings,
         searchHistory,
+        malAuth,
       },
       tombstones,
     },
@@ -240,19 +271,56 @@ syncRouter.post("/sync/push", async (c) => {
     watchProgress = [],
     sharedSettings,
     searchHistory,
+    malAuth,
     deletions = [],
   } = body || {};
 
-  // Fetch all active tombstones for this profile to apply tombstone dominance
-  const existingTombstones = await c.env.DB.prepare(
-    "SELECT entity_type, entity_key, deleted_at FROM tombstones WHERE profile_id = ?"
-  )
-    .bind(profileId)
-    .all<{ entity_type: string; entity_key: string; deleted_at: number }>();
+  if (malAuth !== undefined && malAuth !== null) {
+    if (
+      typeof malAuth !== "object" ||
+      Array.isArray(malAuth) ||
+      typeof malAuth.clientId !== "string" ||
+      malAuth.clientId.trim().length === 0 ||
+      typeof malAuth.accessToken !== "string" ||
+      malAuth.accessToken.trim().length === 0 ||
+      typeof malAuth.refreshToken !== "string" ||
+      malAuth.refreshToken.trim().length === 0
+    ) {
+      return c.json(
+        {
+          error:
+            "Invalid malAuth payload: clientId, accessToken, and refreshToken must be non-empty strings",
+        },
+        400
+      );
+    }
+  }
+
+  const hasMalAuthActivity =
+    (malAuth !== undefined && malAuth !== null) ||
+    (Array.isArray(deletions) && deletions.some((d: any) => d?.type === "mal_auth"));
+
+  // Fetch all active tombstones (and existing mal_auth row if needed) for dominance & LWW checks
+  const [existingTombstones, existingMalAuth] = await Promise.all([
+    c.env.DB.prepare(
+      "SELECT entity_type, entity_key, deleted_at FROM tombstones WHERE profile_id = ?"
+    )
+      .bind(profileId)
+      .all<{ entity_type: string; entity_key: string; deleted_at: number }>(),
+    hasMalAuthActivity
+      ? c.env.DB.prepare("SELECT updated_at FROM mal_auth WHERE profile_id = ?")
+          .bind(profileId)
+          .first<{ updated_at: number }>()
+      : Promise.resolve(null),
+  ]);
 
   const tombstoneMap = new Map<string, number>();
+  let malTombTime: number | undefined;
   for (const t of existingTombstones.results || []) {
     tombstoneMap.set(`${t.entity_type}:${t.entity_key}`, t.deleted_at);
+    if (t.entity_type === "mal_auth") {
+      malTombTime = malTombTime !== undefined ? Math.max(malTombTime, t.deleted_at) : t.deleted_at;
+    }
   }
 
   const statements: D1PreparedStatement[] = [];
@@ -260,13 +328,25 @@ syncRouter.post("/sync/push", async (c) => {
 
   // 1. Process Deletions first
   for (const del of deletions) {
-    if (!del || typeof del !== "object" || !del.type || !del.key) {
+    if (!del || typeof del !== "object" || !del.type) {
+      continue;
+    }
+    const delKey =
+      del.type === "mal_auth"
+        ? typeof del.key === "string" && del.key.trim().length > 0
+          ? del.key.trim()
+          : "default"
+        : del.key;
+    if (!delKey || typeof delKey !== "string") {
       continue;
     }
     const delTime = typeof del.deletedAt === "number" ? del.deletedAt : now;
     const serverDelTime = computeServerTimestamp(now, del.deletedAt);
-    const tombKey = `${del.type}:${del.key}`;
-    tombstoneMap.set(tombKey, delTime);
+    const tombKey = `${del.type}:${delKey}`;
+    tombstoneMap.set(tombKey, Math.max(tombstoneMap.get(tombKey) ?? -Infinity, delTime));
+    if (del.type === "mal_auth") {
+      malTombTime = malTombTime !== undefined ? Math.max(malTombTime, delTime) : delTime;
+    }
 
     // Insert or update tombstone
     statements.push(
@@ -277,7 +357,7 @@ syncRouter.post("/sync/push", async (c) => {
         DO UPDATE SET
           deleted_at = MAX(tombstones.deleted_at, excluded.deleted_at),
           server_deleted_at = excluded.server_deleted_at
-      `).bind(profileId, del.type, del.key, delTime, serverDelTime)
+      `).bind(profileId, del.type, delKey, delTime, serverDelTime)
     );
 
     // Delete active entity row
@@ -285,17 +365,17 @@ syncRouter.post("/sync/push", async (c) => {
       statements.push(
         c.env.DB.prepare("DELETE FROM favorites WHERE profile_id = ? AND anime_id = ?").bind(
           profileId,
-          del.key
+          delKey
         )
       );
     } else if (del.type === "continue_watching") {
       statements.push(
         c.env.DB.prepare(
           "DELETE FROM continue_watching WHERE profile_id = ? AND anime_id = ?"
-        ).bind(profileId, del.key)
+        ).bind(profileId, delKey)
       );
     } else if (del.type === "watch_history") {
-      const parts = del.key.split(":");
+      const parts = delKey.split(":");
       const animeId = parts[0];
       const epNum = parts[1] ? parseInt(parts[1], 10) : null;
       if (epNum !== null && !isNaN(epNum)) {
@@ -313,7 +393,7 @@ syncRouter.post("/sync/push", async (c) => {
         );
       }
     } else if (del.type === "watch_progress") {
-      const parts = del.key.split(":");
+      const parts = delKey.split(":");
       const animeId = parts[0];
       const epNum = parts[1] ? parseInt(parts[1], 10) : null;
       if (epNum !== null && !isNaN(epNum)) {
@@ -321,6 +401,14 @@ syncRouter.post("/sync/push", async (c) => {
           c.env.DB.prepare(
             "DELETE FROM watch_progress WHERE profile_id = ? AND anime_id = ? AND episode_number = ?"
           ).bind(profileId, animeId, epNum)
+        );
+      }
+    } else if (del.type === "mal_auth") {
+      if (!existingMalAuth || delTime >= existingMalAuth.updated_at) {
+        statements.push(
+          c.env.DB.prepare(
+            "DELETE FROM mal_auth WHERE profile_id = ? AND updated_at <= ?"
+          ).bind(profileId, delTime)
         );
       }
     }
@@ -637,6 +725,93 @@ syncRouter.post("/sync/push", async (c) => {
     appliedCount++;
   }
 
+  // 8. Process MyAnimeList Auth (malAuth) — credentials only, strictly per-profile
+  if (malAuth && typeof malAuth === "object") {
+    const itemTime =
+      typeof malAuth.updatedAt === "number" && Number.isFinite(malAuth.updatedAt)
+        ? malAuth.updatedAt
+        : now;
+    const serverItemTime = computeServerTimestamp(now, malAuth.updatedAt);
+
+    const isBlockedByTombstone = malTombTime !== undefined && itemTime <= malTombTime;
+    const isStaleComparedToExisting =
+      existingMalAuth !== null &&
+      existingMalAuth !== undefined &&
+      itemTime < existingMalAuth.updated_at;
+
+    if (!isBlockedByTombstone && !isStaleComparedToExisting) {
+      if (malTombTime !== undefined && itemTime > malTombTime) {
+        statements.push(
+          c.env.DB.prepare(
+            "DELETE FROM tombstones WHERE profile_id = ? AND entity_type = 'mal_auth'"
+          ).bind(profileId)
+        );
+        malTombTime = undefined;
+        for (const key of Array.from(tombstoneMap.keys())) {
+          if (key.startsWith("mal_auth:")) {
+            tombstoneMap.delete(key);
+          }
+        }
+      }
+
+      const expiresAt =
+        typeof malAuth.expiresAt === "number" && Number.isFinite(malAuth.expiresAt)
+          ? malAuth.expiresAt
+          : 0;
+      const tokenType =
+        typeof malAuth.tokenType === "string" && malAuth.tokenType.trim().length > 0
+          ? malAuth.tokenType.trim()
+          : "Bearer";
+      const username =
+        typeof malAuth.username === "string" && malAuth.username.length > 0
+          ? malAuth.username
+          : null;
+      const userId =
+        typeof malAuth.userId === "number" && Number.isFinite(malAuth.userId)
+          ? malAuth.userId
+          : null;
+      const picture =
+        typeof malAuth.picture === "string" && malAuth.picture.length > 0
+          ? malAuth.picture
+          : null;
+
+      statements.push(
+        c.env.DB.prepare(`
+          INSERT INTO mal_auth (
+            profile_id, client_id, access_token, refresh_token, expires_at,
+            token_type, username, user_id, picture, updated_at, server_updated_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(profile_id) DO UPDATE SET
+            client_id = excluded.client_id,
+            access_token = excluded.access_token,
+            refresh_token = excluded.refresh_token,
+            expires_at = excluded.expires_at,
+            token_type = excluded.token_type,
+            username = excluded.username,
+            user_id = excluded.user_id,
+            picture = excluded.picture,
+            updated_at = excluded.updated_at,
+            server_updated_at = excluded.server_updated_at
+          WHERE excluded.updated_at >= mal_auth.updated_at
+        `).bind(
+          profileId,
+          malAuth.clientId.trim(),
+          malAuth.accessToken,
+          malAuth.refreshToken,
+          expiresAt,
+          tokenType,
+          username,
+          userId,
+          picture,
+          itemTime,
+          serverItemTime
+        )
+      );
+      appliedCount++;
+    }
+  }
+
   // Execute in batches of <= 50 queries for D1 Free tier compliance
   const CHUNK_SIZE = 50;
   for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
@@ -673,6 +848,9 @@ syncRouter.post("/sync/push", async (c) => {
     if (typeof wp?.updatedAt === "number" && wp.updatedAt < anchorTime) {
       anchorTime = wp.updatedAt;
     }
+  }
+  if (malAuth && typeof malAuth.updatedAt === "number" && malAuth.updatedAt < anchorTime) {
+    anchorTime = malAuth.updatedAt;
   }
 
   if (c.executionCtx && typeof c.executionCtx.waitUntil === "function") {

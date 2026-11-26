@@ -222,6 +222,7 @@ profilesRouter.delete("/profiles/:id", async (c) => {
     c.env.DB.prepare("DELETE FROM watch_history WHERE profile_id = ?").bind(id),
     c.env.DB.prepare("DELETE FROM watch_progress WHERE profile_id = ?").bind(id),
     c.env.DB.prepare("DELETE FROM shared_settings WHERE profile_id = ?").bind(id),
+    c.env.DB.prepare("DELETE FROM mal_auth WHERE profile_id = ?").bind(id),
     c.env.DB.prepare("DELETE FROM tombstones WHERE profile_id = ?").bind(id),
     c.env.DB.prepare("DELETE FROM devices WHERE profile_id = ?").bind(id),
     c.env.DB.prepare("UPDATE pairing_codes SET approved_profile_id = NULL WHERE approved_profile_id = ?").bind(id),

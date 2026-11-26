@@ -116,6 +116,7 @@ export interface PullLibraryResponse {
     watchProgress: any[];
     sharedSettings: Record<string, any>;
     searchHistory: any[];
+    malAuth?: any | null;
   };
   tombstones: Array<{ type: string; key: string; deletedAt: number }>;
 }
@@ -418,6 +419,7 @@ export class KuroSyncApi {
     watchProgress?: any[];
     sharedSettings?: Record<string, any>;
     searchHistory?: any[];
+    malAuth?: any | null;
     deletions?: Array<{ type: string; key: string; deletedAt?: number }>;
     profileId?: string;
   }): Promise<{ ok: boolean; serverTime: number; appliedCount: number }> {

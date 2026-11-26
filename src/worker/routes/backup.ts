@@ -17,7 +17,7 @@ backupRouter.get("/sync/export", async (c) => {
   const profileFilter = profileIdQuery ? "WHERE profile_id = ?" : "";
   const profileArgs = profileIdQuery ? [profileIdQuery] : [];
 
-  const [profiles, favorites, cw, wh, wp, ss, tombstones] = await Promise.all([
+  const [profiles, favorites, cw, wh, wp, ss, malAuth, tombstones] = await Promise.all([
     profileIdQuery
       ? c.env.DB.prepare("SELECT * FROM profiles WHERE id = ?").bind(profileIdQuery).all()
       : c.env.DB.prepare("SELECT * FROM profiles").all(),
@@ -42,6 +42,10 @@ backupRouter.get("/sync/export", async (c) => {
       .bind(...profileArgs)
       .all(),
 
+    c.env.DB.prepare(`SELECT * FROM mal_auth ${profileFilter}`)
+      .bind(...profileArgs)
+      .all(),
+
     c.env.DB.prepare(`SELECT * FROM tombstones ${profileFilter}`)
       .bind(...profileArgs)
       .all(),
@@ -56,6 +60,7 @@ backupRouter.get("/sync/export", async (c) => {
     watchHistory: wh.results || [],
     watchProgress: wp.results || [],
     sharedSettings: ss.results || [],
+    malAuth: malAuth.results || [],
     tombstones: tombstones.results || [],
   };
 
@@ -82,6 +87,7 @@ backupRouter.post("/sync/import", async (c) => {
     watchHistory = [],
     watchProgress = [],
     sharedSettings = [],
+    malAuth = [],
     tombstones = [],
   } = backup;
 
@@ -299,8 +305,83 @@ backupRouter.post("/sync/import", async (c) => {
     );
   }
 
-  // 7. Tombstones
-  for (const t of tombstones) {
+  // 7. MyAnimeList Auth (optional, backward-compatible with backups lacking malAuth)
+  if (Array.isArray(malAuth)) {
+    for (const ma of malAuth) {
+      if (!ma || typeof ma !== "object") continue;
+      const profileId = ma.profile_id ?? ma.profileId;
+      const clientId = ma.client_id ?? ma.clientId;
+      const accessToken = ma.access_token ?? ma.accessToken;
+      const refreshToken = ma.refresh_token ?? ma.refreshToken;
+      if (
+        typeof profileId !== "string" ||
+        profileId.length === 0 ||
+        typeof clientId !== "string" ||
+        clientId.length === 0 ||
+        typeof accessToken !== "string" ||
+        accessToken.length === 0 ||
+        typeof refreshToken !== "string" ||
+        refreshToken.length === 0
+      ) {
+        continue;
+      }
+      const updatedAt = ma.updated_at ?? ma.updatedAt ?? Date.now();
+      const serverUpdatedAt = ma.server_updated_at ?? ma.serverUpdatedAt ?? updatedAt;
+      const expiresAt = ma.expires_at ?? ma.expiresAt ?? 0;
+      const tokenType = ma.token_type ?? ma.tokenType ?? "Bearer";
+      const username = ma.username ?? null;
+      const userId = ma.user_id ?? ma.userId ?? null;
+      const picture = ma.picture ?? null;
+
+      statements.push(
+        c.env.DB.prepare(`
+          INSERT INTO mal_auth (
+            profile_id, client_id, access_token, refresh_token, expires_at,
+            token_type, username, user_id, picture, updated_at, server_updated_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(profile_id) DO UPDATE SET
+            client_id = excluded.client_id,
+            access_token = excluded.access_token,
+            refresh_token = excluded.refresh_token,
+            expires_at = excluded.expires_at,
+            token_type = excluded.token_type,
+            username = excluded.username,
+            user_id = excluded.user_id,
+            picture = excluded.picture,
+            updated_at = excluded.updated_at,
+            server_updated_at = excluded.server_updated_at
+        `).bind(
+          profileId,
+          clientId,
+          accessToken,
+          refreshToken,
+          expiresAt,
+          tokenType,
+          username,
+          userId,
+          picture,
+          updatedAt,
+          serverUpdatedAt
+        )
+      );
+    }
+  }
+
+  // 8. Tombstones
+  for (const t of Array.isArray(tombstones) ? tombstones : []) {
+    if (!t || typeof t !== "object") continue;
+    const profileId = t.profile_id ?? t.profileId;
+    const entityType = t.entity_type ?? t.type;
+    const entityKey =
+      entityType === "mal_auth"
+        ? (t.entity_key ?? t.key) || "default"
+        : t.entity_key ?? t.key;
+    if (!profileId || !entityType || !entityKey) continue;
+
+    const deletedAt = t.deleted_at ?? t.deletedAt ?? Date.now();
+    const serverDeletedAt = t.server_deleted_at ?? t.serverDeletedAt ?? deletedAt;
+
     statements.push(
       c.env.DB.prepare(`
         INSERT INTO tombstones (profile_id, entity_type, entity_key, deleted_at, server_deleted_at)
@@ -308,14 +389,16 @@ backupRouter.post("/sync/import", async (c) => {
         ON CONFLICT(profile_id, entity_type, entity_key) DO UPDATE SET
           deleted_at = excluded.deleted_at,
           server_deleted_at = excluded.server_deleted_at
-      `).bind(
-        t.profile_id,
-        t.entity_type,
-        t.entity_key,
-        t.deleted_at || Date.now(),
-        t.server_deleted_at || t.deleted_at || Date.now()
-      )
+      `).bind(profileId, entityType, entityKey, deletedAt, serverDeletedAt)
     );
+
+    if (entityType === "mal_auth") {
+      statements.push(
+        c.env.DB.prepare(
+          "DELETE FROM mal_auth WHERE profile_id = ? AND updated_at <= ?"
+        ).bind(profileId, deletedAt)
+      );
+    }
   }
 
   // Execute in chunks <= 50

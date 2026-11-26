@@ -94,7 +94,7 @@ describe("Tier 1: D1 DDL & ensureSchema (Feature 2)", () => {
     await clearDatabase(env.DB);
   });
 
-  it("2.1 ensureSchema creates all 10 required database tables", async () => {
+  it("2.1 ensureSchema creates all 11 required database tables", async () => {
     await ensureSchema(env.DB);
 
     const tablesRes = await env.DB.prepare(`
@@ -112,6 +112,7 @@ describe("Tier 1: D1 DDL & ensureSchema (Feature 2)", () => {
       "devices",
       "favorites",
       "instance_config",
+      "mal_auth",
       "pairing_codes",
       "profiles",
       "shared_settings",
@@ -121,10 +122,10 @@ describe("Tier 1: D1 DDL & ensureSchema (Feature 2)", () => {
     ];
 
     expect(actualTables).toEqual(expectedTables);
-    expect(actualTables.length).toBe(10);
+    expect(actualTables.length).toBe(11);
   });
 
-  it("2.2 ensureSchema creates all 12 custom performance indexes", async () => {
+  it("2.2 ensureSchema creates all 13 custom performance indexes", async () => {
     await ensureSchema(env.DB);
 
     const indexesRes = await env.DB.prepare(`
@@ -142,6 +143,7 @@ describe("Tier 1: D1 DDL & ensureSchema (Feature 2)", () => {
       "idx_devices_profile_id",
       "idx_devices_token_hash",
       "idx_favorites_profile_updated",
+      "idx_mal_auth_profile_updated",
       "idx_pairing_codes_expires_at",
       "idx_pairing_codes_status",
       "idx_shared_settings_profile_updated",
@@ -152,7 +154,7 @@ describe("Tier 1: D1 DDL & ensureSchema (Feature 2)", () => {
     ];
 
     expect(actualIndexes).toEqual(expectedIndexes);
-    expect(actualIndexes.length).toBe(12);
+    expect(actualIndexes.length).toBe(13);
   });
 
   it("2.3 ensureSchema is idempotent under sequential and concurrent invocation", async () => {
@@ -167,7 +169,7 @@ describe("Tier 1: D1 DDL & ensureSchema (Feature 2)", () => {
       ])
     ).resolves.not.toThrow();
 
-    // Verify tables still intact and exactly 10
+    // Verify tables still intact and exactly 11
     const countRes = await env.DB.prepare(`
       SELECT count(*) as count FROM sqlite_master
       WHERE type='table'
@@ -176,7 +178,7 @@ describe("Tier 1: D1 DDL & ensureSchema (Feature 2)", () => {
         AND name != 'd1_migrations'
     `).first<{ count: number }>();
 
-    expect(countRes?.count).toBe(10);
+    expect(countRes?.count).toBe(11);
   });
 
   it("2.4 clearDatabase helper truncates all 10 tables without foreign key constraint violations", async () => {

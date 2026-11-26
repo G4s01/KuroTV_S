@@ -4,6 +4,7 @@ import type {
   WatchHistoryItem,
   WatchProgressItem,
   SearchHistoryItem,
+  MalAuthSyncRecord,
   LocalStorageState,
   RemotePullResponse,
   MergeResult,
@@ -244,6 +245,33 @@ export function mergeLocalAndRemote(
     }
   }
 
+  // --------------------------------------------------------------------------
+  // 7. MyAnimeList Auth (malAuth): tombstone dominance & LWW on updatedAt
+  // --------------------------------------------------------------------------
+  const malTombDefault = tombstoneMap.get("mal_auth:default");
+  const malTombAlt = tombstoneMap.get("mal_auth:malAuth");
+  const malTomb =
+    malTombDefault !== undefined && malTombAlt !== undefined
+      ? Math.max(malTombDefault, malTombAlt)
+      : (malTombDefault ?? malTombAlt);
+
+  let mergedMalAuth: MalAuthSyncRecord | null = local.malAuth ? { ...local.malAuth } : null;
+  if (local.malAuth && malTomb !== undefined && (local.malAuth.updatedAt || 0) <= malTomb) {
+    mergedMalAuth = null;
+    appliedDeletions++;
+  }
+
+  const remoteMalAuth = remote.deltas?.malAuth;
+  if (remoteMalAuth && typeof remoteMalAuth === "object") {
+    const blockedByTomb = malTomb !== undefined && (remoteMalAuth.updatedAt || 0) <= malTomb;
+    if (!blockedByTomb) {
+      if (!mergedMalAuth || (remoteMalAuth.updatedAt || 0) >= (mergedMalAuth.updatedAt || 0)) {
+        mergedMalAuth = { ...remoteMalAuth };
+        appliedUpserts++;
+      }
+    }
+  }
+
   return {
     state: {
       favorites: Array.from(favMap.values()),
@@ -252,6 +280,7 @@ export function mergeLocalAndRemote(
       watchProgress: Array.from(wpMap.values()),
       sharedSettings,
       searchHistory: Array.from(searchHistoryMap.values()),
+      malAuth: mergedMalAuth,
     },
     appliedDeletions,
     appliedUpserts,

@@ -10,6 +10,7 @@ import type {
   WatchProgressItem,
   SearchHistoryItem,
   AniSkipSettings,
+  MalAuthSyncRecord,
 } from "@kurosync/sync-client";
 
 export const FIXTURE_ANIME_1: AnimeItem = {
@@ -164,6 +165,30 @@ export const FIXTURE_ANISKIP_SETTINGS: AniSkipSettings = {
 export const FIXTURE_SEARCH_HISTORY_1: SearchHistoryItem = {
   query: "Solo Leveling",
   timestamp: 1700000000000,
+};
+
+export const FIXTURE_MAL_AUTH_1: MalAuthSyncRecord = {
+  clientId: "mal-client-id-123",
+  accessToken: "mal-access-token-initial",
+  refreshToken: "mal-refresh-token-initial",
+  expiresAt: 1700003600000,
+  tokenType: "Bearer",
+  username: "kuro_otaku",
+  userId: 987654,
+  picture: "https://cdn.myanimelist.net/images/userimages/987654.jpg",
+  updatedAt: 1700000000000,
+};
+
+export const FIXTURE_MAL_AUTH_2: MalAuthSyncRecord = {
+  clientId: "mal-client-id-456",
+  accessToken: "mal-access-token-secondary",
+  refreshToken: "mal-refresh-token-secondary",
+  expiresAt: 1700007200000,
+  tokenType: "Bearer",
+  username: "salotto_viewer",
+  userId: 112233,
+  picture: "https://cdn.myanimelist.net/images/userimages/112233.jpg",
+  updatedAt: 1700001000000,
 };
 
 export const FIXTURE_PROFILE_PRIMARY = {
