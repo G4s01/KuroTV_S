@@ -55,6 +55,7 @@ KuroTV stores data collections under dedicated keys defined in `StorageKeys` (`a
 | `StorageKeys.WATCH_PROGRESS_PREFIX` (`user.progress.<animeId>.<epNum>`) | `WatchProgressItem` | `deltas.watchProgress` | `animeId` + `episodeNumber` |
 | `StorageKeys.SEARCH_HISTORY` (`user.searchHistory`) | `SearchHistoryItem[]` | `deltas.searchHistory` | `query` |
 | `StorageKeys.APP_SETTINGS` / `ANISKIP_SETTINGS` | `AppSettings` / `AniSkipSettings` | `deltas.sharedSettings` | `key` (`aniSkipSettings`, `autoplayNext`, etc.) |
+| Profile-scoped MAL auth credentials | `MalAuthSyncRecord \| null` | `deltas.malAuth` | `profile_id` (auth state only; never lists, episode cache, MAL settings, or highwater) |
 
 ### Tombstone Mapping
 When an entity is deleted locally:
@@ -63,6 +64,7 @@ When an entity is deleted locally:
 - Watch History: append tombstone `{ type: 'watch_history', key: `${animeId}:${episodeNumber}`, deletedAt: Date.now() }`.
 - Watch Progress: append tombstone `{ type: 'watch_progress', key: `${animeId}:${episodeNumber}`, deletedAt: Date.now() }`.
 - Search History: append tombstone `{ type: 'search_history', key: query, deletedAt: Date.now() }`.
+- MyAnimeList Auth (disconnect/logout from MAL): append tombstone `{ type: 'mal_auth', key: 'default', deletedAt: Date.now() }` (`mergeLocalAndRemote()` honors both `'mal_auth:default'` and `'mal_auth:malAuth'`).
 
 ---
 
@@ -410,7 +412,28 @@ When synchronizing Continue Watching across devices, `mergeLocalAndRemote()` pre
 
 ---
 
-## 11. Zero-Dependency Client Initialization Example
+## 11. MyAnimeList Auth (`malAuth`) Synchronization & Capability Detection
+
+KuroTV_S supports profile-isolated synchronization of **MyAnimeList OAuth credentials only** via the `mal_auth` table and `deltas.malAuth` (`MalAuthSyncRecord`).
+
+### Strict Domain Boundaries
+- **Synced fields only**: `clientId`, `accessToken`, `refreshToken`, `expiresAt`, `tokenType`, `username`, `userId`, `picture`, `updatedAt`, plus `'mal_auth'` tombstones.
+- **Never synced**: MAL anime/manga lists, episode caches, MAL plugin preferences/settings, or local MAL highwater timestamps.
+- **Zero Worker secrets**: No MAL application secret or hardcoded `clientId` lives in the Worker; the client supplies `clientId` in `MalAuthSyncRecord`.
+- **Per-profile isolation**: Each `mal_auth` row is keyed by `profile_id` (`ON DELETE CASCADE` to `profiles(id)` and cleaned up on `DELETE /api/profiles/:id`).
+
+### Capability Detection & Delta Semantics
+- `GET /api/sync/pull` **always** includes the `malAuth` property inside `deltas` (`MalAuthSyncRecord | null`), allowing `KuroTV_M` to detect server support cleanly via `'malAuth' in remotePull.deltas`.
+- `deltas.malAuth === null` means *"no `malAuth` record exists or it was not modified since `since`"* — `mergeLocalAndRemote()` preserves existing `local.malAuth` unless a `'mal_auth'` tombstone dominates it.
+- Deletions (MAL disconnect/logout) are signaled via `deletions: [{ type: 'mal_auth', key: 'default', deletedAt }]` and propagated through `tombstones`.
+- **Conflict Resolution**:
+  - `POST /api/sync/push` validates that `clientId`, `accessToken`, and `refreshToken` are non-empty strings.
+  - Updates resolve Last-Write-Wins via client `updatedAt >= existing.updated_at` while committing `server_updated_at` for reliable `since` delta replication across offline devices.
+  - A `'mal_auth'` tombstone blocks stale pushes where `updatedAt <= tombstone.deleted_at`; a newer re-login (`updatedAt > tombstone.deleted_at`) invalidates the tombstone and restores `mal_auth`.
+
+---
+
+## 12. Zero-Dependency Client Initialization Example
 
 ```typescript
 import { KuroSyncClient, mergeLocalAndRemote, type LocalStorageState } from "@kurosync/sync-client";
@@ -437,6 +460,7 @@ export async function performFullSync(): Promise<void> {
     watchProgress: [], // Gathered from user.progress.*
     sharedSettings: JSON.parse(mmkv.getString("settings.appSettings") || "{}"),
     searchHistory: JSON.parse(mmkv.getString("user.searchHistory") || "[]"),
+    malAuth: JSON.parse(mmkv.getString("auth.malAuth") || "null"),
   };
 
   const { state: mergedState } = mergeLocalAndRemote(localState, remotePull);
@@ -445,6 +469,13 @@ export async function performFullSync(): Promise<void> {
   mmkv.set("user.continueWatching", JSON.stringify(mergedState.continueWatching));
   mmkv.set("user.history", JSON.stringify(mergedState.watchHistory));
   mmkv.set("user.searchHistory", JSON.stringify(mergedState.searchHistory));
+  if ("malAuth" in remotePull.deltas) {
+    if (mergedState.malAuth) {
+      mmkv.set("auth.malAuth", JSON.stringify(mergedState.malAuth));
+    } else {
+      mmkv.delete("auth.malAuth");
+    }
+  }
   mmkv.set("sync.last_timestamp", remotePull.serverTime);
 }
 ```

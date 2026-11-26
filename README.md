@@ -1,198 +1,188 @@
-# KuroTV_S ⚡
+<div align="center">
+
+<img src="public/icon.png" width="84" alt="KuroTV_S Icon" />
+
+# ⚡ KuroTV Sync Server (KuroTV_S)
+
+### _Backend serverless self-hosted per la sincronizzazione multi-dispositivo su Cloudflare Workers + D1, con Console Web OLED._
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/G4s01/KuroTV_S)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
-[![Cloudflare D1](https://img.shields.io/badge/Database-Cloudflare_D1-F38020?logo=sqlite&logoColor=white)](https://developers.cloudflare.com/d1/)
 
-**KuroTV_S** is a personal, self-hosted synchronization backend for Cloudflare Workers (100% compatible with the Cloudflare Free plan), complete with an OLED Web Console and a Simple-Login pairing flow for Android TV and Smartphone, designed to synchronize multiple instances of **KuroTV Mobile (`KuroTV_M`)** and **KuroTV TV (`KuroTV_TV`)** without depending on central developer servers.
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
+[![Cloudflare D1](https://img.shields.io/badge/Database-Cloudflare%20D1-F38020?style=for-the-badge&logo=sqlite&logoColor=white)](https://developers.cloudflare.com/d1/)
+[![Hono](https://img.shields.io/badge/Framework-Hono-E36002?style=for-the-badge&logo=hono&logoColor=white)](https://hono.dev/)
+[![React 19](https://img.shields.io/badge/Console-React%2019-23272F?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/SDK-TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](./packages/sync-client)
+[![Free Tier](https://img.shields.io/badge/Cloudflare-Free%20Tier%20Ready-10B981?style=for-the-badge)](https://developers.cloudflare.com/workers/platform/pricing/)
+[![License MIT](https://img.shields.io/badge/License-MIT-E50914?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
----
+<br />
 
-## ✨ Key Features
+**KuroTV_S** è il backend personale e self-hosted progettato per sincronizzare in tempo reale **KuroTV Mobile (`KuroTV_M`)** e **KuroTV Android TV (`KuroTV_TV`)** sul piano gratuito di Cloudflare, senza dipendere da server centrali di terze parti.
 
-- **100% Free Plan Friendly**: Runs entirely within Cloudflare Workers and D1 Free tier allowances — zero hosting costs, no credit card required.
-- **Serverless D1 Database**: Cloudflare D1 serverless SQLite storage with automatic, idempotent schema bootstrap (`ensureSchema`).
-- **Pitch-Black OLED Web Console**: Responsive React + Vite dashboard styled with Kuro OLED design tokens (`#000000` pitch-black background, `#121212` cards, `#E50914` accents, and technical monospace typography).
-- **Simple-Login TV Pairing**: Seamless 6-character PIN (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`) and QR pairing for Android TV without requiring physical keyboard input.
-- **Delta Sync Engine**: High-performance delta synchronization with Last-Write-Wins (LWW) conflict resolution, 90-day tombstone dominance, and timeline progress safeguards.
-- **Smart "IN PARI" (Caught-Up) Sync**: Seamlessly preserves caught-up status and prevents episode regressions across multiple devices.
-- **Full Backup & Restore**: One-click JSON backup export and import for profiles, libraries, and settings.
-- **Pure TypeScript Client SDK**: Zero-dependency `@kurosync/sync-client` package compatible with Hermes, React Native MMKV, Android TV, and Web.
+</div>
 
 ---
 
-## ⚡ 3-Step Quick Start
+## 🌐 L'Ecosistema Kuro
 
-### Step 1: Deploy to Cloudflare Workers
-Click the **Deploy to Cloudflare Workers** button above, or deploy manually using Wrangler:
+Kuro è una suite coordinata per lo streaming anime concepita per coprire ogni schermo con sincronizzazione privata e deterministica:
 
+| Progetto | Piattaforma | Focus & Caratteristiche | Repository |
+| :--- | :--- | :--- | :--- |
+| **📱 KuroTV_M** | **Android Phone & Tablet** | Touch-native 120 FPS, Live Scrubbing, capitoli YouTube, download SAF, AniSkip. | [**G4s01/KuroTV_M**](https://github.com/G4s01/KuroTV_M) |
+| **📺 KuroTV_T** | **Android TV & Google TV** | Interfaccia leanback 100% D-Pad, navigazione spaziale fluida, ExoPlayer TV. | [**G4s01/KuroTV_T**](https://github.com/G4s01/KuroTV_T) |
+| **⚡ KuroTV_S** | **Cloudflare Workers + D1** | Backend serverless, delta sync deterministico, profili Netflix-style, pairing TV. | [**G4s01/KuroTV_S**](https://github.com/G4s01/KuroTV_S) |
+| **🖥️ KuroTV_D** | **Desktop (In programma)** | Client desktop multipiattaforma in fase di pianificazione e sviluppo. | _In arrivo_ |
+
+---
+
+## ✨ Funzionalità Chiave
+
+### ☁️ Delta Sync Deterministico & Multi-Profilo
+- **Isolamento Totale per Profilo**: preferiti, *Continua a guardare*, cronologia, progressi per puntata, impostazioni condivise, credenziali MAL e tombstones sono isolati per `profile_id` con pulizia atomica su `DELETE /api/profiles/:id`.
+- **Doppio Clock Client / Server**: risoluzione **Last-Write-Wins (LWW)** sul timestamp logico client (`updated_at`) e replicazione delta su cursore server (`server_updated_at` / `server_deleted_at`) per evitare *delta miss* su dispositivi offline.
+- **Protezione Progressi & "IN PARI"**: salvaguardia temporale contro regressioni di episodio/minutaggio, conservazione del completamento e propagazione dello stato `isCaughtUp`.
+- **Tombstone Dominance (90 giorni)**: cancellazioni propagate in modo deterministico su tutti i dispositivi con auto-purge periodico.
+
+### 🔐 Sync Credenziali MyAnimeList (`malAuth`)
+- **Solo Stato & Token Auth**: sincronizza esclusivamente i dati OAuth MAL per singolo profilo (`clientId`, `accessToken`, `refreshToken`, `expiresAt`, `tokenType`, `username`, `userId`, `picture`, `updatedAt`, più tombstone `'mal_auth'`).
+- **Zero Dati Ridondanti & Zero Segreti Hardcoded**: nessuna lista anime, cache episodi, impostazione MAL o highwater locale viene inviato al server, e nessun segreto applicativo è presente nel Worker.
+- **Capability Detection Automatica**: `GET /api/sync/pull` espone sempre la chiave `deltas.malAuth` (`MalAuthSyncRecord | null`), rilevata nativamente da `KuroTV_M`.
+
+### 📺 Simple-Login Pairing & Sicurezza Web Crypto
+- **Accoppiamento Android TV**: codici brevi da 6 caratteri senza caratteri ambigui (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`) e QR `/pair` con consumo atomico.
+- **QR Connect Smartphone Monouso**: token effimeri `qr_*` con TTL di 5 minuti scambiati atomicamente una sola volta via `/api/auth/exchange`.
+- **Crittografia Nativa**: PBKDF2-SHA256 (100.000 iterazioni, salt random 16 byte), confronti timing-safe (`crypto.subtle.timingSafeEqual`), hash SHA-256 per i token dispositivo e supporto opzionale `SYNC_ADMIN_SECRET`.
+
+### 🖤 Console Web OLED & Disaster Recovery
+- **Design Nero Assoluto (`#000000`)**: dashboard React 19 + Vite con card `#121212`, accenti `#E50914`, tipografia monospace uppercase e modali di conferma in-app (`ConfirmModal`).
+- **Gestione Completa**: selettore profili, libreria per profilo, revoca/rinomina dispositivi, esportazione e ripristino snapshot JSON completo (`/api/sync/export` & `/api/sync/import`).
+
+---
+
+## ⚡ Avvio Rapido & Auto-Deploy
+
+### 1. Deploy su Cloudflare Workers (One-Click o Fork Auto-Sync)
+1. Premi **Deploy to Cloudflare Workers** in cima alla pagina, oppure esegui un **Fork** del repository.
+2. Collega il fork su [Cloudflare Dashboard](https://dash.cloudflare.com/) (**Workers & Pages → Connect to Git**) per build e deploy automatici su ogni push a `main`.
+3. Abilita **Actions** sul fork: [`.github/workflows/sync-upstream.yml`](./.github/workflows/sync-upstream.yml) sincronizza automaticamente gli aggiornamenti upstream ogni giorno alle `04:00 UTC`.
+
+### 2. Deploy Manuale da CLI
 ```bash
-# Clone repository
 git clone https://github.com/G4s01/KuroTV_S.git
 cd KuroTV_S
-
-# Install dependencies and build
 npm install
 npm run build
-
-# Deploy to Cloudflare
-npx wrangler deploy
+npm run deploy
 ```
 
-> **Note on D1 Provisioning**: `wrangler.jsonc` uses dynamic binding without hardcoding a database ID. Cloudflare automatically provisions the D1 database on initial deployment. The backend's built-in `ensureSchema()` automatically creates all required tables and indexes on first run.
+> [!NOTE]
+> `wrangler.jsonc` usa binding D1 dinamico (`kurosync-db`, nessun `database_id` hardcoded). `npm run deploy` applica prima le migrazioni D1 remote (`0001_init.sql`, `0002_server_replication_cursor.sql`, `0003_mal_auth.sql`) e poi pubblica il Worker; su database vergini `ensureSchema()` esegue il bootstrap automatico al primo avvio.
 
-### Step 2: Complete Setup Wizard
-1. Open your deployed Worker URL: `https://<your-subdomain>.workers.dev`.
-2. The OLED Web Console will automatically greet you with the **Setup Wizard**.
-3. Choose your **Master Password** and create your primary profile (e.g. `Principale`).
-4. Once completed, `/api/setup` is permanently locked for maximum security.
-
-### Step 3: Connect KuroTV Mobile & Android TV
-- **Android TV**: Launch KuroTV TV, open Settings -> Sync -> "Accoppia TV". A 6-character code and QR code will appear. Visit `/pair` on your phone or Web Console, select your profile, and enter the code to pair instantly!
-- **Smartphone**: Scan the Quick Connect QR code from the Web Console dashboard or enter your Worker URL and Master Password directly in the KuroTV Mobile app.
+### 3. Configurazione & Pairing Client
+1. Apri `https://<tuo-worker>.workers.dev` e completa il **Setup Wizard** impostando Master Password e profilo iniziale (`/api/setup` si blocca automaticamente al termine).
+2. Su **KuroTV Mobile**: scansiona il QR rapido dalla Console Web oppure accedi con URL e Master Password scegliendo il profilo.
+3. Su **KuroTV TV**: genera il codice a 6 caratteri e autorizzalo dalla Console Web (`/pair`) o dall'app Mobile.
 
 ---
 
-## 📊 Cloudflare Free Tier Allocation & Resource Limits
+## 📊 Ottimizzazione Cloudflare Free Tier
 
-KuroTV_S is carefully engineered to operate well below Cloudflare's Free tier thresholds:
-
-| Resource | Cloudflare Free Limit | KuroTV_S Implementation & Safeguards |
-|---|---|---|
-| **D1 Database Reads** | 5,000,000 queries / day | Delta pulls use `since=<timestamp>` index filtering; typical sync uses < 5 reads. |
-| **D1 Database Writes** | 100,000 queries / day | Playback progress debounced to 45–60s intervals with immediate flush on pause/exit. |
-| **D1 Database Storage** | 5 GB total | Automatic maintenance purges tombstones older than 90 days and pairing codes older than 24h. |
-| **Worker Invocations** | 100,000 requests / day | Lightweight payload caching and batched updates. |
-| **Batch Query Limit** | <= 50 queries per call | `pushDelta` automatically chunks atomic mutations into slices of <= 50 queries per `db.batch()`. |
+| Risorsa | Limite Free Tier | Salvaguardia KuroTV_S |
+| :--- | :--- | :--- |
+| **Letture D1** | 5.000.000 / giorno | Delta pull incrementali (`?since=`) indicizzati su `server_updated_at` / `server_deleted_at`. |
+| **Scritture D1** | 100.000 / giorno | Debounce player a 45–60s lato client con flush immediato su pausa, uscita o fine episodio. |
+| **Batch Atomic** | ≤ 50 statement / batch | Suddivisione automatica (`CHUNK_SIZE = 50`) in `sync.ts` e `backup.ts`. |
+| **Storage D1** | 5 GB totali | Auto-purge automatico dei tombstones > 90 giorni e codici pairing > 24 ore. |
 
 ---
 
-## 🏗️ Architecture & Technology Stack
+## 🛠️ Stack Tecnologico
 
-- **Runtime Backend**: [Cloudflare Workers](https://workers.cloudflare.com/) + [Hono](https://hono.dev/) framework.
-- **Database**: [Cloudflare D1](https://developers.cloudflare.com/d1/) serverless SQLite.
-- **Security & Cryptography**: Native Web Crypto API (`crypto.subtle`), PBKDF2-SHA256 (100,000 iterations) with 16-byte cryptographically secure random salt, timing-safe string comparison (`crypto.subtle.timingSafeEqual`), SHA-256 device token hashing.
-- **Web Console**: React 19 + TypeScript + Vite, served directly via Workers Static Assets (`@cloudflare/vite-plugin`) with single-page-application fallback.
-- **Client SDK**: `@kurosync/sync-client` pure TypeScript package (zero Node dependencies, Hermes-compatible).
-
----
-
-## 🔌 API Endpoints Overview
-
-| Method | Endpoint | Description | Auth Required |
-|---|---|---|:---:|
-| `GET` | `/api/health` | Public health check and initialization status | No |
-| `POST` | `/api/setup` | First-run setup wizard (locked once completed) | No |
-| `POST` | `/api/auth/login` | Master password authentication (returns session token) | No (Rate-limited) |
-| `POST` | `/api/auth/device-login` | Direct device login with profile binding | No (Rate-limited) |
-| `POST` | `/api/auth/profiles` | List profiles with Master Password (for Netflix-style initial selector) | No (Rate-limited) |
-| `POST` | `/api/auth/switch-profile` | Switch active profile for connected device session | Bearer Token |
-| `POST` | `/api/auth/qr-token` | Generate ephemeral single-use QR token (5m TTL) | Bearer Token |
-| `POST` | `/api/auth/exchange` | Atomically exchange single-use QR token for device token | No |
-| `POST` | `/api/auth/logout` | Revoke session and invalidate device token | Bearer Token |
-| `POST` | `/api/pair/start` | Request 6-character TV pairing code & secret | No (Rate-limited) |
-| `GET` | `/api/pair/status` | Poll TV pairing status (requires `X-Pair-Secret`) | Pair Secret |
-| `GET` | `/api/pair/info` | Public pairing code preview for Web Console | No |
-| `POST` | `/api/pair/approve` | Authorize pairing code and issue device token | Bearer Token |
-| `GET` | `/api/profiles` | List instance viewing profiles | Bearer Token |
-| `POST` | `/api/profiles` | Create new viewing profile | Bearer Token |
-| `PUT` | `/api/profiles/:id` | Update profile name and avatar color | Bearer Token |
-| `DELETE`| `/api/profiles/:id` | Purge viewing profile and associated state | Bearer Token |
-| `GET` | `/api/devices` | List connected devices (ordered by last seen) | Bearer Token |
-| `PUT` | `/api/devices/:id` | Update device name or profile association | Bearer Token |
-| `DELETE`| `/api/devices/:id` | Revoke device or permanently delete disconnected device | Bearer Token |
-| `DELETE`| `/api/devices/revoked` | Bulk purge all disconnected/revoked devices | Bearer Token |
-| `GET` | `/api/sync/pull` | Delta sync pull (`?since=<epochMs>`) | Bearer Token |
-| `POST` | `/api/sync/push` | Batched delta sync push (atomic `db.batch() <= 50`) | Bearer Token |
-| `GET` | `/api/sync/export` | Export full or profile JSON backup | Bearer Token |
-| `POST` | `/api/sync/import` | Restore database from JSON backup | Bearer Token |
+| Componente | Tecnologia | Ruolo & Caratteristiche |
+| :--- | :--- | :--- |
+| **Runtime Edge** | **Cloudflare Workers** + **Hono** | Routing modulare ultra-leggero e middleware auth/rate-limit |
+| **Database** | **Cloudflare D1 (SQLite)** | Migrazioni incrementali in `migrations/` + bootstrap `ensureSchema()` |
+| **Crittografia** | **Web Crypto API** | PBKDF2-SHA256, `timingSafeEqual`, SHA-256 token hashing |
+| **Console Web** | **React 19** + **Vite** | Static Assets serviti dal Worker (`run_worker_first: ["/api/*"]`) |
+| **Client SDK** | **`@kurosync/sync-client`** | TypeScript puro zero-dipendenze (Hermes, MMKV, Android TV, Web) |
+| **Test Suite** | **Vitest** + **`workerd`** | E2E su runtime Cloudflare reale (`@cloudflare/vitest-pool-workers`) |
 
 ---
 
-## 🔄 Fork & Auto-Deploy
+## 🔌 Panoramica Endpoint API
 
-Fork this repository to host your own KuroTV_S instance. **Updates from upstream are synced and deployed automatically** — zero maintenance required.
+<details>
+<summary><strong>Mostra la tabella completa dei 25 endpoint REST (<code>/api/*</code>)</strong></summary>
 
-### Setup (one-time, ~2 minutes)
+<br />
 
-1. **Fork** this repository on GitHub.
-2. **Connect to Cloudflare**: Go to [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages** → **Create** → **Connect to Git**, select your forked repository, and deploy. Cloudflare will automatically build and deploy on every push to `main`.
-3. **Enable Actions** on your fork: go to the **Actions** tab and click _"I understand my workflows, go ahead and enable them"_. This enables the automatic sync with upstream — no secrets or tokens required.
+| Metodo | Endpoint | Descrizione | Auth |
+| :--- | :--- | :--- | :---: |
+| `GET` | `/api/health` | Stato servizio e inizializzazione istanza | — |
+| `POST` | `/api/setup` | Configurazione iniziale Master Password (bloccata dopo il setup) | — |
+| `POST` | `/api/auth/login` | Login Master Console Web (restituisce session token) | Rate-limited |
+| `POST` | `/api/auth/device-login` | Login diretto dispositivo con binding al profilo | Rate-limited |
+| `POST` | `/api/auth/profiles` | Lista profili via Master Password (selettore pre-login) | Rate-limited |
+| `POST` | `/api/auth/switch-profile` | Cambio profilo attivo per la sessione dispositivo | Bearer |
+| `POST` | `/api/auth/qr-token` | Genera QR token effimero monouso (TTL 5 minuti) | Bearer |
+| `POST` | `/api/auth/exchange` | Scambia atomicamente un QR token con device token | — |
+| `POST` | `/api/auth/logout` | Revoca la sessione e invalida il device token | Bearer |
+| `POST` | `/api/pair/start` | Avvia pairing TV (codice 6 caratteri + `pairSecret`) | Rate-limited |
+| `GET` | `/api/pair/status` | Polling stato pairing TV (`X-Pair-Secret`) | Pair Secret |
+| `GET` | `/api/pair/info` | Anteprima pubblica codice pairing per Web Console | — |
+| `POST` | `/api/pair/approve` | Approva pairing TV e associa il profilo | Bearer |
+| `GET` | `/api/profiles` | Elenca i profili dell'istanza | Bearer |
+| `POST` | `/api/profiles` | Crea un nuovo profilo | Bearer |
+| `PUT` | `/api/profiles/:id` | Aggiorna nome e colore avatar del profilo | Bearer |
+| `DELETE` | `/api/profiles/:id` | Elimina profilo e tutti i dati associati (inclusi `mal_auth` e `tombstones`) | Bearer |
+| `GET` | `/api/devices` | Elenca i dispositivi connessi (`?profileId=`) | Bearer |
+| `PUT` | `/api/devices/:id` | Rinomina dispositivo o cambia profilo associato | Bearer |
+| `DELETE` | `/api/devices/:id` | Revoca dispositivo (o rimozione definitiva con `?purge=true`) | Bearer |
+| `DELETE` | `/api/devices/revoked` | Rimozione massiva dispositivi disconnessi | Bearer |
+| `GET` | `/api/sync/pull` | Delta pull (`?since=`; include sempre `deltas.malAuth` e `tombstones`) | Bearer |
+| `POST` | `/api/sync/push` | Delta push atomico (inclusi `malAuth` e deletions `'mal_auth'`) | Bearer |
+| `GET` | `/api/sync/export` | Export snapshot JSON completo o filtrato (`?profileId=`) | Bearer |
+| `POST` | `/api/sync/import` | Ripristino backup JSON (retrocompatibile con backup legacy) | Bearer |
 
-### How it works
-
-```mermaid
-flowchart LR
-    A["G4s01/KuroTV_S\n(upstream)"] -->|"Sync Upstream\n(daily cron)"| B["Your Fork\n(GitHub)"]
-    B -->|"push to main"| C["Cloudflare\n(auto build & deploy)"]
-```
-
-- **Sync Upstream** (GitHub Actions): Runs daily at 04:00 UTC on your fork, fetches and merges new commits from upstream. Can also be triggered manually from the Actions tab.
-- **Cloudflare Git Integration**: Detects every push to `main` and automatically builds and deploys your Worker — no API tokens or CI secrets needed.
-
-> **First deploy**: The D1 database (`kurosync-db`) is auto-provisioned on your Cloudflare account. The backend's `ensureSchema()` creates all tables and indexes on first run.
-
----
-
-## 📦 Client SDK Usage (`@kurosync/sync-client`)
-
-Install or link `@kurosync/sync-client` into your React Native or Web application:
-
-```typescript
-import { KuroSyncClient, mergeLocalAndRemote } from "@kurosync/sync-client";
-
-// 1. Initialize Client
-const client = new KuroSyncClient({
-  baseUrl: "https://kurosync.example.workers.dev",
-  deviceToken: "your_saved_device_token",
-});
-
-// 2. Simple TV Pairing Flow
-const { code, pairSecret, verifyUrl } = await client.startTvPairing({
-  deviceName: "Living Room Android TV",
-  deviceType: "tv",
-  platform: "android-tv",
-});
-
-// 3. Delta Pull & Deterministic Merge
-const remoteDelta = await client.pullDelta(lastSyncTimestamp);
-const { state: mergedState, appliedUpserts, appliedDeletions } = mergeLocalAndRemote(
-  localMMKVState,
-  remoteDelta
-);
-
-// 4. Batched Delta Push
-await client.pushDelta({
-  continueWatching: [updatedItem],
-  deletions: [{ type: "continue_watching", key: "anime-123" }],
-});
-```
-
-See [docs/CLIENT_INTEGRATION.md](docs/CLIENT_INTEGRATION.md) for the complete integration guide including MMKV storage key mappings, playback debouncing specifications, and Android TV pairing instructions.
+</details>
 
 ---
 
-## 🧪 Testing & Verification
-
-KuroTV_S comes with a comprehensive Vitest automated test suite running against real Cloudflare `workerd` runtimes:
+## 📦 Tooling, Verifica & Rilascio
 
 ```bash
-# Run all tests (Workers D1 in-memory + Client SDK)
+# Verifica tipi TypeScript (Worker, Web Console e @kurosync/sync-client)
+npm run typecheck
+
+# Esecuzione completa test suite (Workers D1 + Client SDK)
 npm test
 
-# Run Client SDK tests only
-npm run test:client
+# Build di produzione (Worker + Console Web + SDK)
+npm run build
 
-# Run Worker tests only
-npm run test:workers
-
-# Run TypeScript compilation checks
-npm run typecheck
+# Verifica, commit e push su GitHub (con --deploy opzionale per Cloudflare)
+./release.sh -m "feat: descrizione sintetica"
 ```
+
+> [!NOTE]
+> [`release.sh`](./release.sh) esegue automaticamente `typecheck`, `build` e `test` prima di creare il commit e inviarlo a `origin`. Supporta `--dry-run`, `--no-push`, `--skip-checks`, `--deploy` e `-y`.
 
 ---
 
-## 📄 License
+## 📚 Documentazione di Dettaglio
 
-MIT License. Designed and maintained for personal self-hosted synchronization of KuroTV clients.
+- 🔌 [**Guida Integrazione Client**](./docs/CLIENT_INTEGRATION.md) — Mapping MMKV, debounce player, pairing TV, QR connect e sync `malAuth`
+- 🧪 [**Report Suite di Test**](./TEST_READY.md) — Copertura dettagliata dei 276 test su `workerd` e `@kurosync/sync-client`
+- 🤖 [**Istruzioni Agentiche & Regole**](./AGENTS.md) — Vincoli D1/Cloudflare, regole di dominio `malAuth` e pipeline operativa
+- 🗄️ [**Migrazioni Database D1**](./migrations) — Schema SQL incrementale (`0001` → `0003`)
+- 📦 [**Client SDK Condiviso**](./packages/sync-client) — Package TypeScript puro `@kurosync/sync-client`
+
+---
+
+<div align="center">
+
+_Sviluppato per l'ecosistema Kuro • Serverless, Self-Hosted & Free-Tier Friendly_
+
+</div>
