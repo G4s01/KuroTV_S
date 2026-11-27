@@ -22,6 +22,7 @@ RUN apk add --no-cache su-exec
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=8787 \
+    UMASK=022 \
     KUROSYNC_DATA_DIR=/data \
     KUROSYNC_DB_PATH=/data/kurosync.db \
     KUROSYNC_STATIC_DIR=/app/dist/client \

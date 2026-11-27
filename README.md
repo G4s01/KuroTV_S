@@ -66,6 +66,7 @@ services:
 | `networks` | — | Collega il container alla rete Docker esterna di NPM (es. `npm_proxy`) per raggiungerlo come `http://kurotv-s:8787` senza esporre porte sull'host. |
 | `user` | — *(entrypoint `1000:1000`)* | Forza `UID:GID` da Compose (es. `"1000:1000"`); richiede che la cartella host esista e sia scrivibile da tale utente. |
 | `PUID` / `PGID` *(env)* | `1000` / `1000` | Usati dall'entrypoint (`su-exec`) quando `user:` non è impostato: adegua automaticamente il proprietario di `/data` ed esegue Node senza `root`. |
+| `UMASK` *(env)* | `022` | Maschera permessi per nuovi file/directory in `/data` (es. `022` -> `644`, `002` -> `664` condiviso di gruppo, `077` -> `600` privato). |
 | `volumes` suffix (`:rw` / `:ro`) | `:rw` | Controlla i permessi di scrittura (`:rw`) o sola lettura (`:ro`) sul bind mount `/data`. |
 | `read_only` + `tmpfs` | `false` | Con `read_only: true` e `tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]` rende immutabile il filesystem del container eccetto `/data`. |
 | `cap_drop` / `security_opt` | — | Hardening consigliato quando `user:` è impostato (`cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`). |

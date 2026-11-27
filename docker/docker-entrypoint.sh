@@ -4,7 +4,18 @@ set -eu
 DATA_DIR="${KUROSYNC_DATA_DIR:-/data}"
 PUID="${PUID:-1000}"
 PGID="${PGID:-1000}"
+UMASK="${UMASK:-022}"
 READ_ONLY="${KUROSYNC_READ_ONLY:-false}"
+
+case "$UMASK" in
+  [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7])
+    umask "$UMASK"
+    ;;
+  *)
+    echo "[kurotv-s] ERRORE: Valore UMASK non valido '$UMASK' (atteso ottale a 3 o 4 cifre, es. 022, 002, 077)." >&2
+    exit 1
+    ;;
+esac
 
 # If started directly as non-root (e.g. Compose `user: "1000:1000"`), verify mount and exec
 if [ "$(id -u)" -ne 0 ]; then
