@@ -9,14 +9,19 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build && npm run build --workspace=packages/sync-client",
+    "build:client": "vite build --config vite.client.config.ts && npm run build --workspace=packages/sync-client",
+    "build:server": "vite build --config vite.server.config.ts",
+    "build:docker": "npm run build:client && npm run build:server",
+    "start:docker": "node dist/server/index.mjs",
     "deploy": "npx wrangler d1 migrations apply DB --remote && npx wrangler deploy",
     "test": "vitest run",
     "test:workers": "vitest run --project workers",
     "test:client": "vitest run --project client-sdk",
-    "typecheck": "tsc --noEmit && npm run typecheck --workspace=packages/sync-client",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit && npm run typecheck --workspace=packages/sync-client",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.11",
     "hono": "^4.13.18",
     "qrcode": "^1.5.4"
   },

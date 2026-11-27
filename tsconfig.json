@@ -36,6 +36,10 @@
   "exclude": [
     "node_modules",
     "dist",
-    "_reference"
+    "_reference",
+    "src/server",
+    "test/server",
+    "vite.client.config.ts",
+    "vite.server.config.ts"
   ]
 }

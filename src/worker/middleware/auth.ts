@@ -44,17 +44,16 @@ export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
     );
   }
 
-  // Update last seen timestamp
+  // Update last seen timestamp (ignore write errors if running against a read-only database mount)
+  const updateLastSeen = c.env.DB.prepare("UPDATE devices SET last_seen_at = ? WHERE id = ?")
+    .bind(now, device.id)
+    .run()
+    .catch(() => {});
+
   if (c.executionCtx && typeof c.executionCtx.waitUntil === "function") {
-    c.executionCtx.waitUntil(
-      c.env.DB.prepare("UPDATE devices SET last_seen_at = ? WHERE id = ?")
-        .bind(now, device.id)
-        .run()
-    );
+    c.executionCtx.waitUntil(updateLastSeen);
   } else {
-    await c.env.DB.prepare("UPDATE devices SET last_seen_at = ? WHERE id = ?")
-      .bind(now, device.id)
-      .run();
+    await updateLastSeen;
   }
 
   let effectiveProfileId = device.profile_id;

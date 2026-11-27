@@ -188,11 +188,15 @@ pairRouter.get("/pair/status", async (c) => {
   // Check if expired
   if (now > record.expires_at || record.status === "expired") {
     if (record.status !== "expired") {
-      c.executionCtx.waitUntil(
-        c.env.DB.prepare("UPDATE pairing_codes SET status = 'expired' WHERE code = ?")
-          .bind(normalizedCode)
-          .run()
-      );
+      const expireQuery = c.env.DB.prepare("UPDATE pairing_codes SET status = 'expired' WHERE code = ?")
+        .bind(normalizedCode)
+        .run()
+        .catch(() => {});
+      if (c.executionCtx && typeof c.executionCtx.waitUntil === "function") {
+        c.executionCtx.waitUntil(expireQuery);
+      } else {
+        await expireQuery;
+      }
     }
     return c.json({ status: "expired" }, 200);
   }

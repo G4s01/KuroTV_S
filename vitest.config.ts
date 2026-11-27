@@ -38,10 +38,21 @@ export default defineConfig(async () => {
             include: [
               "test/**/*.test.ts",
               "!test/client-sdk/**/*.test.ts",
+              "!test/server/**/*.test.ts",
               "!packages/sync-client/**/*.test.ts",
               "!test/tier1-feature-coverage/client-sdk.test.ts",
               "!test/tier2-boundary-corner/client-sdk-boundary.test.ts",
             ],
+          },
+        },
+        {
+          test: {
+            name: "server",
+            environment: "node",
+            sequence: {
+              groupOrder: 0,
+            },
+            include: ["test/server/**/*.test.ts"],
           },
         },
         {

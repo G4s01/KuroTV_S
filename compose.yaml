@@ -1,0 +1,66 @@
+services:
+  kurotv-s:
+    image: ghcr.io/g4s01/kurotv_s:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kurotv-s
+    restart: unless-stopped
+
+    # Gestione permessi utente sulla directory esterna (/data):
+    # - Di default esegue senza privilegi root usando PUID:PGID (assicurati che la cartella su host esista e sia scrivibile da tale UID:GID).
+    # - In alternativa, per far adeguare automaticamente i permessi di ./data all'avvio tramite entrypoint (su-exec),
+    #   commenta `user:` e `cap_drop:` qui sotto.
+    user: "${PUID:-1000}:${PGID:-1000}"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    # Root filesystem in sola lettura: solo il volume /data (e /tmp in RAM) può scrivere
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+
+    # Rete & Porta (Bridge Mode di default; per Host Mode commenta `ports:` e decommenta `network_mode: host`)
+    # network_mode: host
+    ports:
+      - "${KUROSYNC_BIND_ADDRESS:-0.0.0.0}:${KUROSYNC_PORT:-8787}:${KUROSYNC_PORT:-8787}"
+
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "${KUROSYNC_PORT:-8787}"
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+      KUROSYNC_DATA_DIR: /data
+      KUROSYNC_DB_PATH: /data/kurosync.db
+      KUROSYNC_READ_ONLY: "${KUROSYNC_READ_ONLY:-false}"
+      TRUST_PROXY: "${TRUST_PROXY:-true}"
+      PUBLIC_URL: "${PUBLIC_URL:-}"
+      SYNC_ADMIN_SECRET: "${SYNC_ADMIN_SECRET:-}"
+      MAX_BODY_BYTES: "${MAX_BODY_BYTES:-52428800}"
+
+    # Directory esterna persistente (database SQLite e file WAL) + controllo :rw / :ro
+    volumes:
+      - "${KUROSYNC_DATA_DIR:-./data}:/data:${KUROSYNC_DATA_MODE:-rw}"
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/api/health').then(r=>r.json()).then(d=>process.exit(d&&d.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+# Opzionale: se Nginx Proxy Manager gira su una rete Docker dedicata (es. `npm_proxy`),
+# puoi collegare questo servizio alla stessa rete decommentando la sezione seguente:
+#    networks:
+#      - npm_proxy
+#
+# networks:
+#   npm_proxy:
+#     external: true

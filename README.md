@@ -90,6 +90,43 @@ npm run deploy
 
 ---
 
+## 🐳 Self-Hosting con Docker & Nginx Proxy Manager (NPM)
+
+Se preferisci bypassare Cloudflare e ospitare **KuroTV_S** sul tuo server, NAS o Raspberry Pi mantenendo il 100% delle funzionalità, puoi avviare il container ufficiale basato su **Node.js 24 Alpine + SQLite (`node:sqlite`)** tramite [`compose.yaml`](./compose.yaml).
+
+### 1. Avvio Rapido con Docker Compose
+```bash
+git clone https://github.com/G4s01/KuroTV_S.git
+cd KuroTV_S
+cp .env.example .env
+mkdir -p ./data
+docker compose up -d
+```
+Puoi scaricare l'immagine multi-arch (`linux/amd64` e `linux/arm64`) precompilata da **GitHub Container Registry** (`ghcr.io/g4s01/kurotv_s:latest`) con `docker compose pull`, oppure compilarla localmente con `docker compose up -d --build`.
+
+### 2. Directory Dati Esterna & Permessi
+Nel file `.env` (partendo da [`.env.example`](./.env.example)) puoi controllare completamente storage e permessi:
+- **`KUROSYNC_DATA_DIR=./data`**: percorso sull'host dove vengono salvati `kurosync.db` e i file WAL.
+- **`PUID` / `PGID`** (es. `1000` / `1000`): il container gira senza privilegi `root` (`user: "${PUID}:${PGID}"`), con root filesystem `read_only: true`, `cap_drop: [ALL]` e `no-new-privileges:true` (unico percorso scrivibile: `/data`). Se preferisci che sia il container ad adeguare automaticamente il proprietario di `./data` all'avvio tramite `su-exec`, commenta `user:` e `cap_drop:` in [`compose.yaml`](./compose.yaml).
+- **Modalità Sola Lettura / Scrittura**: `KUROSYNC_DATA_MODE=rw` (default) oppure `KUROSYNC_DATA_MODE=ro` insieme a `KUROSYNC_READ_ONLY=true` per consentire la sola consultazione senza modifiche al DB.
+- **Porta configurabile**: `KUROSYNC_PORT=8787` aggiorna sia la porta ascoltata dal server sia il mapping host (supportando sia la modalità **bridge** di default sia **`network_mode: host`** decommentando la relativa riga in `compose.yaml`).
+
+### 3. Configurazione Reverse Proxy su Nginx Proxy Manager (NPM)
+1. **Details**:
+   - **Domain Names**: `kurosync.tuodominio.it`
+   - **Scheme**: `http`
+   - **Forward Hostname / IP**: `kurotv-s` (se sulla stessa rete Docker condivisa), `127.0.0.1` (se NPM e KuroTV_S sono in host mode sullo stesso server) oppure l'IP LAN dell'host Docker.
+   - **Forward Port**: `8787` (o il valore impostato in `KUROSYNC_PORT`).
+2. **SSL**: abilita certificato SSL (Let's Encrypt) e **Force SSL** + **HTTP/2 Support**.
+3. **Advanced** *(consigliato per import backup JSON estesi)*:
+   ```nginx
+   client_max_body_size 50m;
+   ```
+4. **Variabili `.env` per NPM**: lascia `TRUST_PROXY=true` (così `/api/pair/start` genera `verifyUrl` con `https://...` e il rate limiter legge l'IP reale del client). Opzionalmente puoi forzare `PUBLIC_URL=https://kurosync.tuodominio.it`.
+5. **MyAnimeList OAuth**: con HTTPS attivo su NPM, inserisci `https://kurosync.tuodominio.it/mal-callback` su `myanimelist.net/apiconfig` insieme a `kurotv://mal-callback`.
+
+---
+
 ## 📊 Ottimizzazione Cloudflare Free Tier
 
 | Risorsa | Limite Free Tier | Salvaguardia KuroTV_S |
@@ -169,12 +206,15 @@ npm test
 # Build di produzione (Worker + Console Web + SDK)
 npm run build
 
-# Verifica, commit e push su GitHub (con --deploy opzionale per Cloudflare)
-./release.sh -m "feat: descrizione sintetica"
+# Build bundle self-hosted Docker (SPA client + server Node.js)
+npm run build:docker
+
+# Verifica, commit e push su GitHub (con --deploy opzionale per Cloudflare o --tag per release Docker)
+./build-release.sh -m "feat: descrizione sintetica"
 ```
 
 > [!NOTE]
-> [`release.sh`](./release.sh) esegue automaticamente `typecheck`, `build` e `test` prima di creare il commit e inviarlo a `origin`. Supporta `--dry-run`, `--no-push`, `--skip-checks`, `--deploy` e `-y`.
+> [`build-release.sh`](./build-release.sh) esegue automaticamente `typecheck`, `build`, `build:docker` e `test` prima di creare il commit e inviarlo a `origin`. Supporta `--dry-run`, `--no-push`, `--skip-checks`, `--docker`, `--tag vX.Y.Z`, `--deploy` e `-y`. Le push su `main` e i tag `v*.*.*` pubblicano automaticamente l'immagine multi-arch su `ghcr.io` tramite [`.github/workflows/docker-release.yml`](./.github/workflows/docker-release.yml).
 
 ---
 

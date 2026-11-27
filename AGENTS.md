@@ -7,6 +7,7 @@ Questo documento definisce le regole architetturali, i vincoli di dominio, gli s
 ## 1. Architettura & Stack
 
 - **Runtime Backend**: Cloudflare Workers + [Hono](https://hono.dev/) (`src/worker/index.ts`, `src/worker/routes/*`, `src/worker/middleware/auth.ts`).
+- **Runtime Self-Hosted Docker**: Node.js 24 LTS + `@hono/node-server` + `node:sqlite` (`src/server/*`, `Dockerfile`, `compose.yaml`), che riusa integralmente `app` da `src/worker/index.ts` tramite adapter `D1Database`, runner migrazioni e static SPA fallback senza introdurre dipendenze `node:*` dentro `src/worker/*`.
 - **Database**: Cloudflare D1 (SQLite serverless) con migrazioni incrementali in `migrations/` e bootstrap idempotente `ensureSchema()` in `src/worker/schema.ts`.
 - **Web Console OLED**: React 19 + TypeScript + Vite (`src/client/*`), servita tramite Workers Static Assets (`ASSETS` binding, `run_worker_first: ["/api/*"]`, `not_found_handling: "single-page-application"`). Design OLED pitch-black (`#000000`, `#121212`, `#E50914`), tipografia monospace uppercase, routing URL persistente via History API (`src/client/router.ts`), callback OAuth `/mal-callback` (`src/client/malOAuth.ts`, `src/client/views/Dashboard/MalView.tsx`) e modali di conferma in-app (`ConfirmModal.tsx`).
 - **Client SDK Condiviso**: `packages/sync-client` (`@kurosync/sync-client`) — puro TypeScript con zero dipendenze runtime, compatibile con Hermes, React Native MMKV, Android TV, Node.js e browser. **Vietato** importare moduli `node:*` in `packages/sync-client/src/*` o `src/worker/*`.
@@ -112,6 +113,7 @@ Prima di qualsiasi commit, rilascio o deploy, eseguire e verificare senza errori
 ```bash
 npm run typecheck
 npm run build
+npm run build:docker
 npm test
 npx wrangler deploy --dry-run
 ```
@@ -119,13 +121,15 @@ npx wrangler deploy --dry-run
 Per creare un commit verificato e inviarlo su GitHub (`origin`):
 
 ```bash
-./release.sh -m "feat: descrizione sintetica"
+./build-release.sh -m "feat: descrizione sintetica"
 ```
 
-Flag supportati da `./release.sh`:
+Flag supportati da `./build-release.sh`:
 - `-m, --message "<msg>"`: messaggio di commit (se omesso viene richiesto interattivamente).
-- `--skip-checks`: salta `typecheck`, `build` e `test`.
+- `--skip-checks`: salta `typecheck`, `build`, `build:docker` e `test`.
 - `--no-push`: esegue solo il commit locale senza `git push`.
+- `--docker` / `--docker-tag <tag>`: compila anche l'immagine Docker locale durante i controlli.
+- `-t, --tag <vX.Y.Z>`: crea un tag annotato e lo invia su `origin` attivando la release Docker su GitHub Actions (`.github/workflows/docker-release.yml`).
 - `--deploy`: esegue `npm run deploy` dopo il push su GitHub.
 - `--dry-run`: esegue le verifiche e mostra lo stato senza alterare git o effettuare push.
 - `-y, --yes`: salta la conferma interattiva.
