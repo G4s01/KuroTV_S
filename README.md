@@ -4,21 +4,15 @@
 
 # ⚡ KuroTV Sync Server (KuroTV_S)
 
-### _Backend serverless self-hosted per la sincronizzazione multi-dispositivo su Cloudflare Workers + D1, con Console Web OLED._
+### _Backend self-hosted per la sincronizzazione multi-dispositivo (Cloudflare Workers + D1 o Docker + SQLite), con Console Web OLED._
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/G4s01/KuroTV_S)
 
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
-[![Cloudflare D1](https://img.shields.io/badge/Database-Cloudflare%20D1-F38020?style=for-the-badge&logo=sqlite&logoColor=white)](https://developers.cloudflare.com/d1/)
+[![Docker](https://img.shields.io/badge/Docker-Self--Hosted-2496ED?style=for-the-badge&logo=docker&logoColor=white)](./compose.yaml)
 [![Hono](https://img.shields.io/badge/Framework-Hono-E36002?style=for-the-badge&logo=hono&logoColor=white)](https://hono.dev/)
 [![React 19](https://img.shields.io/badge/Console-React%2019-23272F?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/SDK-TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](./packages/sync-client)
-[![Free Tier](https://img.shields.io/badge/Cloudflare-Free%20Tier%20Ready-10B981?style=for-the-badge)](https://developers.cloudflare.com/workers/platform/pricing/)
 [![License MIT](https://img.shields.io/badge/License-MIT-E50914?style=for-the-badge)](https://opensource.org/licenses/MIT)
-
-<br />
-
-**KuroTV_S** è il backend personale e self-hosted progettato per sincronizzare in tempo reale **KuroTV Mobile (`KuroTV_M`)** e **KuroTV Android TV (`KuroTV_TV`)** sul piano gratuito di Cloudflare, senza dipendere da server centrali di terze parti.
 
 </div>
 
@@ -26,210 +20,147 @@
 
 ## 🌐 L'Ecosistema Kuro
 
-Kuro è una suite coordinata per lo streaming anime concepita per coprire ogni schermo con sincronizzazione privata e deterministica:
-
-| Progetto | Piattaforma | Focus & Caratteristiche | Repository |
+| Progetto | Piattaforma | Focus | Repository |
 | :--- | :--- | :--- | :--- |
-| **📱 KuroTV_M** | **Android Phone & Tablet** | Touch-native 120 FPS, Live Scrubbing, capitoli YouTube, download SAF, AniSkip. | [**G4s01/KuroTV_M**](https://github.com/G4s01/KuroTV_M) |
-| **📺 KuroTV_T** | **Android TV & Google TV** | Interfaccia leanback 100% D-Pad, navigazione spaziale fluida, ExoPlayer TV. | [**G4s01/KuroTV_T**](https://github.com/G4s01/KuroTV_T) |
-| **⚡ KuroTV_S** | **Cloudflare Workers + D1** | Backend serverless, delta sync deterministico, profili Netflix-style, pairing TV. | [**G4s01/KuroTV_S**](https://github.com/G4s01/KuroTV_S) |
-| **🖥️ KuroTV_D** | **Desktop (In programma)** | Client desktop multipiattaforma in fase di pianificazione e sviluppo. | _In arrivo_ |
+| **📱 KuroTV_M** | Android Phone & Tablet | Player touch 120 FPS, download SAF, AniSkip | [**G4s01/KuroTV_M**](https://github.com/G4s01/KuroTV_M) |
+| **📺 KuroTV_T** | Android TV & Google TV | Interfaccia D-Pad leanback, ExoPlayer TV | [**G4s01/KuroTV_T**](https://github.com/G4s01/KuroTV_T) |
+| **⚡ KuroTV_S** | Cloudflare / Docker | Sync server, multi-profilo, pairing TV, Console OLED | [**G4s01/KuroTV_S**](https://github.com/G4s01/KuroTV_S) |
+| **🖥️ KuroTV_D** | Desktop | Client desktop multipiattaforma | _In arrivo_ |
 
 ---
 
-## ✨ Funzionalità Chiave
+## ✨ Funzionalità Principali
 
-### ☁️ Delta Sync Deterministico & Multi-Profilo
-- **Isolamento Totale per Profilo**: preferiti, *Continua a guardare*, cronologia, progressi per puntata, impostazioni condivise, credenziali MAL e tombstones sono isolati per `profile_id` con pulizia atomica su `DELETE /api/profiles/:id`.
-- **Doppio Clock Client / Server**: risoluzione **Last-Write-Wins (LWW)** sul timestamp logico client (`updated_at`) e replicazione delta su cursore server (`server_updated_at` / `server_deleted_at`) per evitare *delta miss* su dispositivi offline.
-- **Protezione Progressi & "IN PARI"**: salvaguardia temporale contro regressioni di episodio/minutaggio, conservazione del completamento e propagazione dello stato `isCaughtUp`.
-- **Tombstone Dominance (90 giorni)**: cancellazioni propagate in modo deterministico su tutti i dispositivi con auto-purge periodico.
-
-### 🔐 Sync Credenziali MyAnimeList (`malAuth`) & Gestione Web Panel
-- **Solo Stato & Token Auth**: sincronizza esclusivamente i dati OAuth MAL per singolo profilo (`clientId`, `accessToken`, `refreshToken`, `expiresAt`, `tokenType`, `username`, `userId`, `picture`, `updatedAt`, più tombstone `'mal_auth'`).
-- **Zero Dati Ridondanti & Zero Segreti Hardcoded**: nessuna lista anime, cache episodi, impostazione MAL o highwater locale viene inviato al server, e nessun segreto applicativo è presente nel Worker.
-- **Capability Detection Automatica**: `GET /api/sync/pull` espone sempre la chiave `deltas.malAuth` (`MalAuthSyncRecord | null`), rilevata nativamente da `KuroTV_M`.
-- **Associazione Diretta dalla Console Web**: nella tab `MYANIMELIST` è presente la gestione accessi per profilo (stato token, rinnovo `@me`/refresh, ricollegamento e disconnessione sincronizzata verso mobile), collegamento OAuth 2.0 PKCE tramite `Client ID` con callback dinamica `<origin>/mal-callback` e guida rapida campo-per-campo per `myanimelist.net/apiconfig/create`.
-
-### 📺 Simple-Login Pairing & Sicurezza Web Crypto
-- **Accoppiamento Android TV**: codici brevi da 6 caratteri senza caratteri ambigui (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`) e QR `/pair` con consumo atomico.
-- **QR Connect Smartphone Monouso**: token effimeri `qr_*` con TTL di 5 minuti scambiati atomicamente una sola volta via `/api/auth/exchange`.
-- **Crittografia Nativa**: PBKDF2-SHA256 (100.000 iterazioni, salt random 16 byte), confronti timing-safe (`crypto.subtle.timingSafeEqual`), hash SHA-256 per i token dispositivo e supporto opzionale `SYNC_ADMIN_SECRET`.
-
-### 🖤 Console Web OLED & Disaster Recovery
-- **Design Nero Assoluto (`#000000`)**: dashboard React 19 + Vite con card `#121212`, accenti `#E50914`, tipografia monospace uppercase e modali di conferma in-app (`ConfirmModal`).
-- **Navigazione URL Persistente**: ogni sezione (`/library`, `/library/favorites`, `/library/history`, `/profiles`, `/devices`, `/mal`, `/backup`, `/pair`) è sincronizzata con la History API e il fallback SPA Cloudflare Workers, mantenendo la sezione attiva al reload della pagina, sui tasti Avanti/Indietro e tramite deep link.
-- **Gestione Completa**: selettore profili, libreria per profilo, associazioni e accessi MyAnimeList (`Client ID` + OAuth PKCE), revoca/rinomina dispositivi, esportazione e ripristino snapshot JSON completo (`/api/sync/export` & `/api/sync/import`).
+- **Delta Sync & Multi-Profilo**: preferiti, *Continua a guardare*, cronologia, progressi, impostazioni e stato `IN PARI` isolati per profilo con risoluzione LWW e tombstones.
+- **Sync MyAnimeList (`malAuth`)**: sincronizza solo i token OAuth MAL per profilo, con collegamento PKCE diretto dalla tab **MYANIMELIST** (`<origin>/mal-callback`).
+- **Pairing TV & QR Connect**: codici a 6 caratteri per Android TV (`/pair`), QR monouso per smartphone e supporto opzionale a `SYNC_ADMIN_SECRET`.
+- **Console Web OLED & Backup**: gestione completa di libreria, profili, dispositivi, MAL e export/import snapshot JSON.
+- **Doppio Runtime**: deploy serverless gratuito su **Cloudflare Workers + D1** oppure container **Docker (`node:24-alpine` + `node:sqlite`)** con database su disco locale.
 
 ---
 
-## ⚡ Avvio Rapido & Auto-Deploy
+## 🐳 Self-Hosting Docker (Dockhand, Portainer, Dockge, Compose)
 
-### 1. Deploy su Cloudflare Workers (One-Click o Fork Auto-Sync)
-1. Premi **Deploy to Cloudflare Workers** in cima alla pagina, oppure esegui un **Fork** del repository.
-2. Collega il fork su [Cloudflare Dashboard](https://dash.cloudflare.com/) (**Workers & Pages → Connect to Git**) per build e deploy automatici su ogni push a `main`.
-3. Abilita **Actions** sul fork: [`.github/workflows/sync-upstream.yml`](./.github/workflows/sync-upstream.yml) sincronizza automaticamente gli aggiornamenti upstream ogni giorno alle `04:00 UTC`.
+### 1. Compose Standalone (Pronto da incollare)
 
-### 2. Deploy Manuale da CLI
-```bash
-git clone https://github.com/G4s01/KuroTV_S.git
-cd KuroTV_S
-npm install
-npm run build
-npm run deploy
+Se hai già un host Docker pronto e vuoi incollare lo stack direttamente su **Dockhand**, **Portainer**, **Dockge** o **Dockerman** senza clonare la repository, usa questo esempio modificando porta, percorso dati e permessi:
+
+```yaml
+services:
+  kurotv-s:
+    image: ghcr.io/g4s01/kurotv_s:latest
+    container_name: kurotv-s
+    restart: unless-stopped
+
+    # Permessi: imposta UID:GID del tuo utente host (es. `id -u` e `id -g`).
+    # La cartella dati sull'host deve esistere ed essere scrivibile da tale UID:GID.
+    # Se preferisci che il container sistemi automaticamente i permessi di /data all'avvio,
+    # commenta `user:` e `cap_drop:` (l'entrypoint userà PUID/PGID tramite su-exec).
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    # Root filesystem del container in sola lettura (scrivibile solo /data se :rw)
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+
+    # Porta (Bridge mode). Per Host mode: commenta `ports:`, decommenta `network_mode: host`
+    # e imposta la porta desiderata su `PORT` sotto.
+    # network_mode: host
+    ports:
+      - "8787:8787"
+
+    environment:
+      PORT: "8787"                      # Porta di ascolto interna (allineata a ports o host mode)
+      PUID: "1000"                      # Usato dall'entrypoint solo se `user:` è commentato
+      PGID: "1000"                      # Usato dall'entrypoint solo se `user:` è commentato
+      KUROSYNC_DATA_DIR: /data          # Directory dati nel container
+      KUROSYNC_DB_PATH: /data/kurosync.db
+      KUROSYNC_READ_ONLY: "false"       # "true" per avviare il database in sola lettura
+      TRUST_PROXY: "true"               # "true" dietro reverse proxy (NPM, Traefik, Caddy)
+      PUBLIC_URL: ""                    # Opzionale: es. "https://kurosync.tuodominio.it"
+      SYNC_ADMIN_SECRET: ""             # Opzionale: password fissa da env (disabilita Setup Wizard)
+      MAX_BODY_BYTES: "52428800"        # Limite payload upload/import backup (50 MB)
+
+    volumes:
+      # Cartella esterna persistente su host -> /data (:rw lettura/scrittura, :ro sola lettura)
+      - /percorso/tuoi/dati/kurosync:/data:rw
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/api/health').then(r=>r.json()).then(d=>process.exit(d&&d.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    # Opzionale: collega il container alla rete Docker esterna del reverse proxy (es. NPM)
+    # networks:
+    #   - npm_proxy
+
+# networks:
+#   npm_proxy:
+#     external: true
 ```
 
-> [!NOTE]
-> `wrangler.jsonc` usa binding D1 dinamico (`kurosync-db`, nessun `database_id` hardcoded). `npm run deploy` applica prima le migrazioni D1 remote (`0001_init.sql`, `0002_server_replication_cursor.sql`, `0003_mal_auth.sql`) e poi pubblica il Worker; su database vergini `ensureSchema()` esegue il bootstrap automatico al primo avvio.
+### 2. Avvio da Repository (con `.env` o build locale)
 
-### 3. Configurazione & Pairing Client
-1. Apri `https://<tuo-worker>.workers.dev` e completa il **Setup Wizard** impostando Master Password e profilo iniziale (`/api/setup` si blocca automaticamente al termine).
-2. Su **KuroTV Mobile**: scansiona il QR rapido dalla Console Web oppure accedi con URL e Master Password scegliendo il profilo.
-3. Su **KuroTV TV**: genera il codice a 6 caratteri e autorizzalo dalla Console Web (`/pair`) o dall'app Mobile.
-4. **MyAnimeList (opzionale)**: dalla tab **MYANIMELIST** associa un account MAL a ogni profilo con il tuo `Client ID` (seguendo la guida integrata per inserire su `myanimelist.net/apiconfig` sia `<tuo-worker>/mal-callback` sia `kurotv://mal-callback` con `App Type: Android` o `other`).
-
----
-
-## 🐳 Self-Hosting con Docker & Nginx Proxy Manager (NPM)
-
-Se preferisci bypassare Cloudflare e ospitare **KuroTV_S** sul tuo server, NAS o Raspberry Pi mantenendo il 100% delle funzionalità, puoi avviare il container ufficiale basato su **Node.js 24 Alpine + SQLite (`node:sqlite`)** tramite [`compose.yaml`](./compose.yaml).
-
-### 1. Avvio Rapido con Docker Compose
 ```bash
-git clone https://github.com/G4s01/KuroTV_S.git
-cd KuroTV_S
+git clone https://github.com/G4s01/KuroTV_S.git && cd KuroTV_S
 cp .env.example .env
 mkdir -p ./data
-docker compose up -d
+docker compose up -d          # oppure `--build` per compilare da sorgente
 ```
-Puoi scaricare l'immagine multi-arch (`linux/amd64` e `linux/arm64`) precompilata da **GitHub Container Registry** (`ghcr.io/g4s01/kurotv_s:latest`) con `docker compose pull`, oppure compilarla localmente con `docker compose up -d --build`.
 
-### 2. Directory Dati Esterna & Permessi
-Nel file `.env` (partendo da [`.env.example`](./.env.example)) puoi controllare completamente storage e permessi:
-- **`KUROSYNC_DATA_DIR=./data`**: percorso sull'host dove vengono salvati `kurosync.db` e i file WAL.
-- **`PUID` / `PGID`** (es. `1000` / `1000`): il container gira senza privilegi `root` (`user: "${PUID}:${PGID}"`), con root filesystem `read_only: true`, `cap_drop: [ALL]` e `no-new-privileges:true` (unico percorso scrivibile: `/data`). Se preferisci che sia il container ad adeguare automaticamente il proprietario di `./data` all'avvio tramite `su-exec`, commenta `user:` e `cap_drop:` in [`compose.yaml`](./compose.yaml).
-- **Modalità Sola Lettura / Scrittura**: `KUROSYNC_DATA_MODE=rw` (default) oppure `KUROSYNC_DATA_MODE=ro` insieme a `KUROSYNC_READ_ONLY=true` per consentire la sola consultazione senza modifiche al DB.
-- **Porta configurabile**: `KUROSYNC_PORT=8787` aggiorna sia la porta ascoltata dal server sia il mapping host (supportando sia la modalità **bridge** di default sia **`network_mode: host`** decommentando la relativa riga in `compose.yaml`).
+Tutti i parametri (`KUROSYNC_DATA_DIR`, `KUROSYNC_DATA_MODE`, `KUROSYNC_READ_ONLY`, `PUID`, `PGID`, `KUROSYNC_PORT`, `TRUST_PROXY`, `PUBLIC_URL`, `SYNC_ADMIN_SECRET`) sono documentati in [`.env.example`](./.env.example) e [`compose.yaml`](./compose.yaml).
 
-### 3. Configurazione Reverse Proxy su Nginx Proxy Manager (NPM)
-1. **Details**:
-   - **Domain Names**: `kurosync.tuodominio.it`
-   - **Scheme**: `http`
-   - **Forward Hostname / IP**: `kurotv-s` (se sulla stessa rete Docker condivisa), `127.0.0.1` (se NPM e KuroTV_S sono in host mode sullo stesso server) oppure l'IP LAN dell'host Docker.
-   - **Forward Port**: `8787` (o il valore impostato in `KUROSYNC_PORT`).
-2. **SSL**: abilita certificato SSL (Let's Encrypt) e **Force SSL** + **HTTP/2 Support**.
-3. **Advanced** *(consigliato per import backup JSON estesi)*:
+### 3. Reverse Proxy con Nginx Proxy Manager (NPM)
+
+1. **Details**: `Scheme: http` · `Forward Hostname / IP`: `kurotv-s` (rete Docker condivisa), `127.0.0.1` (host mode) o IP dell'host · `Forward Port`: `8787` (o il tuo `PORT`).
+2. **SSL**: certificato Let's Encrypt, **Force SSL** e **HTTP/2 Support**.
+3. **Advanced** *(per import backup JSON grandi)*:
    ```nginx
    client_max_body_size 50m;
    ```
-4. **Variabili `.env` per NPM**: lascia `TRUST_PROXY=true` (così `/api/pair/start` genera `verifyUrl` con `https://...` e il rate limiter legge l'IP reale del client). Opzionalmente puoi forzare `PUBLIC_URL=https://kurosync.tuodominio.it`.
-5. **MyAnimeList OAuth**: con HTTPS attivo su NPM, inserisci `https://kurosync.tuodominio.it/mal-callback` su `myanimelist.net/apiconfig` insieme a `kurotv://mal-callback`.
+4. **MyAnimeList OAuth**: con HTTPS attivo su NPM, inserisci `https://<tuo-dominio>/mal-callback` e `kurotv://mal-callback` in `myanimelist.net/apiconfig` (`App Type: Android` o `other`).
 
 ---
 
-## 📊 Ottimizzazione Cloudflare Free Tier
+## ⚡ Deploy su Cloudflare Workers
 
-| Risorsa | Limite Free Tier | Salvaguardia KuroTV_S |
-| :--- | :--- | :--- |
-| **Letture D1** | 5.000.000 / giorno | Delta pull incrementali (`?since=`) indicizzati su `server_updated_at` / `server_deleted_at`. |
-| **Scritture D1** | 100.000 / giorno | Debounce player a 45–60s lato client con flush immediato su pausa, uscita o fine episodio. |
-| **Batch Atomic** | ≤ 50 statement / batch | Suddivisione automatica (`CHUNK_SIZE = 50`) in `sync.ts` e `backup.ts`. |
-| **Storage D1** | 5 GB totali | Auto-purge automatico dei tombstones > 90 giorni e codici pairing > 24 ore. |
-
----
-
-## 🛠️ Stack Tecnologico
-
-| Componente | Tecnologia | Ruolo & Caratteristiche |
-| :--- | :--- | :--- |
-| **Runtime Edge** | **Cloudflare Workers** + **Hono** | Routing modulare ultra-leggero e middleware auth/rate-limit |
-| **Database** | **Cloudflare D1 (SQLite)** | Migrazioni incrementali in `migrations/` + bootstrap `ensureSchema()` |
-| **Crittografia** | **Web Crypto API** | PBKDF2-SHA256, `timingSafeEqual`, SHA-256 token hashing |
-| **Console Web** | **React 19** + **Vite** | Static Assets serviti dal Worker (`run_worker_first: ["/api/*"]`) |
-| **Client SDK** | **`@kurosync/sync-client`** | TypeScript puro zero-dipendenze (Hermes, MMKV, Android TV, Web) |
-| **Test Suite** | **Vitest** + **`workerd`** | E2E su runtime Cloudflare reale (`@cloudflare/vitest-plugin`) |
+1. **One-Click / Fork**: premi **Deploy to Cloudflare Workers** in cima alla pagina oppure esegui un fork e collegalo su **Cloudflare Dashboard → Workers & Pages → Connect to Git** ([`sync-upstream.yml`](./.github/workflows/sync-upstream.yml) mantiene sincronizzati i fork ogni giorno alle `04:00 UTC`).
+2. **Manuale da CLI**:
+   ```bash
+   git clone https://github.com/G4s01/KuroTV_S.git && cd KuroTV_S
+   npm install && npm run build && npm run deploy
+   ```
+3. **Primo avvio**: apri l'URL dell'istanza, completa il **Setup Wizard** e collega i client **KuroTV_M** (QR Connect o Master Password) e **KuroTV_T** (`/pair`).
 
 ---
 
-## 🔌 Panoramica Endpoint API
-
-<details>
-<summary><strong>Mostra la tabella completa dei 29 endpoint REST (<code>/api/*</code>)</strong></summary>
-
-<br />
-
-| Metodo | Endpoint | Descrizione | Auth |
-| :--- | :--- | :--- | :---: |
-| `GET` | `/api/health` | Stato servizio e inizializzazione istanza | — |
-| `POST` | `/api/setup` | Configurazione iniziale Master Password (bloccata dopo il setup) | — |
-| `POST` | `/api/auth/login` | Login Master Console Web (restituisce session token) | Rate-limited |
-| `POST` | `/api/auth/device-login` | Login diretto dispositivo con binding al profilo | Rate-limited |
-| `POST` | `/api/auth/profiles` | Lista profili via Master Password (selettore pre-login) | Rate-limited |
-| `POST` | `/api/auth/switch-profile` | Cambio profilo attivo per la sessione dispositivo | Bearer |
-| `POST` | `/api/auth/qr-token` | Genera QR token effimero monouso (TTL 5 minuti) | Bearer |
-| `POST` | `/api/auth/exchange` | Scambia atomicamente un QR token con device token | — |
-| `POST` | `/api/auth/logout` | Revoca la sessione e invalida il device token | Bearer |
-| `POST` | `/api/pair/start` | Avvia pairing TV (codice 6 caratteri + `pairSecret`) | Rate-limited |
-| `GET` | `/api/pair/status` | Polling stato pairing TV (`X-Pair-Secret`) | Pair Secret |
-| `GET` | `/api/pair/info` | Anteprima pubblica codice pairing per Web Console | — |
-| `POST` | `/api/pair/approve` | Approva pairing TV e associa il profilo | Bearer |
-| `GET` | `/api/profiles` | Elenca i profili dell'istanza | Bearer |
-| `POST` | `/api/profiles` | Crea un nuovo profilo | Bearer |
-| `PUT` | `/api/profiles/:id` | Aggiorna nome e colore avatar del profilo | Bearer |
-| `DELETE` | `/api/profiles/:id` | Elimina profilo e tutti i dati associati (inclusi `mal_auth` e `tombstones`) | Bearer |
-| `GET` | `/api/devices` | Elenca i dispositivi connessi (`?profileId=`) | Bearer |
-| `PUT` | `/api/devices/:id` | Rinomina dispositivo o cambia profilo associato | Bearer |
-| `DELETE` | `/api/devices/:id` | Revoca dispositivo (o rimozione definitiva con `?purge=true`) | Bearer |
-| `DELETE` | `/api/devices/revoked` | Rimozione massiva dispositivi disconnessi | Bearer |
-| `GET` | `/api/sync/pull` | Delta pull (`?since=`; include sempre `deltas.malAuth` e `tombstones`) | Bearer |
-| `POST` | `/api/sync/push` | Delta push atomico (inclusi `malAuth` e deletions `'mal_auth'`) | Bearer |
-| `GET` | `/api/mal/accounts` | Elenca stato e associazioni MAL per profilo (senza esporre token grezzi) | Bearer |
-| `POST` | `/api/mal/oauth/exchange` | Scambio OAuth PKCE MAL lato server per associare un profilo dal Web Panel | Bearer |
-| `POST` | `/api/mal/accounts/:profileId/refresh` | Rinnova token OAuth MAL e aggiorna metadati `@me` del profilo | Bearer |
-| `DELETE` | `/api/mal/accounts/:profileId` | Scollega MAL dal profilo e registra tombstone `'mal_auth'` per i client | Bearer |
-| `GET` | `/api/sync/export` | Export snapshot JSON completo o filtrato (`?profileId=`) | Bearer |
-| `POST` | `/api/sync/import` | Ripristino backup JSON (retrocompatibile con backup legacy) | Bearer |
-
-</details>
-
----
-
-## 📦 Tooling, Verifica & Rilascio
+## 📦 Sviluppo & Rilascio
 
 ```bash
-# Verifica tipi TypeScript (Worker, Web Console e @kurosync/sync-client)
-npm run typecheck
-
-# Esecuzione completa test suite (Workers D1 + Client SDK)
-npm test
-
-# Build di produzione (Worker + Console Web + SDK)
-npm run build
-
-# Build bundle self-hosted Docker (SPA client + server Node.js)
-npm run build:docker
-
-# Verifica, commit e push su GitHub (con --deploy opzionale per Cloudflare o --tag per release Docker)
-./build-release.sh -m "feat: descrizione sintetica"
+npm run typecheck      # Verifica TypeScript (Worker, Server Node, Client, SDK)
+npm run build          # Build Cloudflare Worker + Console Web + SDK
+npm run build:docker   # Build bundle Docker (SPA client + server Node.js)
+npm test               # Test suite Vitest (workerd, Node server, client-sdk)
+./build-release.sh -m "feat: descrizione" [--docker] [--tag v1.x.y] [--deploy]
 ```
 
-> [!NOTE]
-> [`build-release.sh`](./build-release.sh) esegue automaticamente `typecheck`, `build`, `build:docker` e `test` prima di creare il commit e inviarlo a `origin`. Supporta `--dry-run`, `--no-push`, `--skip-checks`, `--docker`, `--tag vX.Y.Z`, `--deploy` e `-y`. Le push su `main` e i tag `v*.*.*` pubblicano automaticamente l'immagine multi-arch su `ghcr.io` tramite [`.github/workflows/docker-release.yml`](./.github/workflows/docker-release.yml).
+> [`build-release.sh`](./build-release.sh) esegue tutte le verifiche prima di committare e pushare su `origin`. I push su `main` e i tag `v*.*.*` pubblicano automaticamente le immagini multi-arch (`amd64`/`arm64`) su `ghcr.io` tramite [`.github/workflows/docker-release.yml`](./.github/workflows/docker-release.yml).
 
 ---
 
-## 📚 Documentazione di Dettaglio
+## 📚 Documentazione
 
-- 🔌 [**Guida Integrazione Client**](./docs/CLIENT_INTEGRATION.md) — Mapping MMKV, debounce player, pairing TV, QR connect e sync `malAuth`
-- 🧪 [**Report Suite di Test**](./TEST_READY.md) — Copertura dettagliata dei 288 test su `workerd` e `@kurosync/sync-client`
-- 🤖 [**Istruzioni Agentiche & Regole**](./AGENTS.md) — Vincoli D1/Cloudflare, regole di dominio `malAuth` e pipeline operativa
-- 🗄️ [**Migrazioni Database D1**](./migrations) — Schema SQL incrementale (`0001` → `0003`)
-- 📦 [**Client SDK Condiviso**](./packages/sync-client) — Package TypeScript puro `@kurosync/sync-client`
-
----
-
-<div align="center">
-
-_Sviluppato per l'ecosistema Kuro • Serverless, Self-Hosted & Free-Tier Friendly_
-
-</div>
+- [**Guida Integrazione Client**](./docs/CLIENT_INTEGRATION.md) — Mapping MMKV, debounce player, pairing TV, QR Connect e sync `malAuth`
+- [**Architettura & Regole**](./AGENTS.md) — Vincoli D1/SQLite, regole `malAuth` e pipeline operativa
+- [**Migrazioni Database**](./migrations) — Schema SQL incrementale (`0001` → `0003`)
+- [**Client SDK**](./packages/sync-client) — Package `@kurosync/sync-client`
