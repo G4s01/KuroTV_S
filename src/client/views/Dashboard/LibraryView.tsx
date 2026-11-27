@@ -13,20 +13,38 @@ import {
 } from '../../components/Icons';
 import { ConfirmModal } from '../../components/ConfirmModal';
 import {
+  getDashboardTabPath,
+  isPlainLeftClick,
+  type LibraryTab,
+} from '../../router';
+import {
   api,
   type ContinueWatchingViewItem,
   type FavoriteViewItem,
   type WatchHistoryViewItem,
 } from '../../api';
 
-type LibraryTab = 'continue_watching' | 'favorites' | 'history';
-
 interface LibraryViewProps {
   activeProfileId: string | null;
+  activeSubTab?: LibraryTab;
+  onSelectSubTab?: (tab: LibraryTab) => void;
 }
 
-export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => {
-  const [tab, setTab] = useState<LibraryTab>('continue_watching');
+export const LibraryView: React.FC<LibraryViewProps> = ({
+  activeProfileId,
+  activeSubTab,
+  onSelectSubTab,
+}) => {
+  const [internalTab, setInternalTab] = useState<LibraryTab>('continue_watching');
+  const tab = activeSubTab ?? internalTab;
+
+  const handleSelectTab = (nextTab: LibraryTab) => {
+    if (onSelectSubTab) {
+      onSelectSubTab(nextTab);
+    } else {
+      setInternalTab(nextTab);
+    }
+  };
   const [continueWatching, setContinueWatching] = useState<ContinueWatchingViewItem[]>([]);
   const [favorites, setFavorites] = useState<FavoriteViewItem[]>([]);
   const [watchHistory, setWatchHistory] = useState<WatchHistoryViewItem[]>([]);
@@ -124,78 +142,64 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
           paddingBottom: '16px',
         }}
       >
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setTab('continue_watching')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              fontFamily: FONT_MONO,
-              fontSize: '13px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              borderRadius: oledTheme.radius.sm,
-              border: `1px solid ${
-                tab === 'continue_watching' ? oledTheme.colors.primary : oledTheme.colors.border
-              }`,
-              backgroundColor:
-                tab === 'continue_watching' ? 'rgba(229, 9, 20, 0.15)' : '#0D0D0D',
-              color: tab === 'continue_watching' ? '#FFFFFF' : oledTheme.colors.textSecondary,
-              cursor: 'pointer',
-            }}
-          >
-            <PlayIcon size={14} color="#E50914" aria-hidden="true" />
-            <span>CONTINUE WATCHING ({continueWatching.length})</span>
-          </button>
-          <button
-            onClick={() => setTab('favorites')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              fontFamily: FONT_MONO,
-              fontSize: '13px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              borderRadius: oledTheme.radius.sm,
-              border: `1px solid ${
-                tab === 'favorites' ? oledTheme.colors.primary : oledTheme.colors.border
-              }`,
-              backgroundColor: tab === 'favorites' ? 'rgba(229, 9, 20, 0.15)' : '#0D0D0D',
-              color: tab === 'favorites' ? '#FFFFFF' : oledTheme.colors.textSecondary,
-              cursor: 'pointer',
-            }}
-          >
-            <HeartIcon size={14} color="#EC4899" aria-hidden="true" />
-            <span>FAVORITES ({favorites.length})</span>
-          </button>
-          <button
-            onClick={() => setTab('history')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              fontFamily: FONT_MONO,
-              fontSize: '13px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              borderRadius: oledTheme.radius.sm,
-              border: `1px solid ${
-                tab === 'history' ? oledTheme.colors.primary : oledTheme.colors.border
-              }`,
-              backgroundColor: tab === 'history' ? 'rgba(229, 9, 20, 0.15)' : '#0D0D0D',
-              color: tab === 'history' ? '#FFFFFF' : oledTheme.colors.textSecondary,
-              cursor: 'pointer',
-            }}
-          >
-            <ClockIcon size={14} color="#3B82F6" aria-hidden="true" />
-            <span>WATCH HISTORY ({watchHistory.length})</span>
-          </button>
-        </div>
+        <nav aria-label="SEZIONI LIBRERIA" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {(
+            [
+              {
+                id: 'continue_watching',
+                label: `CONTINUE WATCHING (${continueWatching.length})`,
+                icon: <PlayIcon size={14} color="#E50914" aria-hidden="true" />,
+              },
+              {
+                id: 'favorites',
+                label: `FAVORITES (${favorites.length})`,
+                icon: <HeartIcon size={14} color="#EC4899" aria-hidden="true" />,
+              },
+              {
+                id: 'history',
+                label: `WATCH HISTORY (${watchHistory.length})`,
+                icon: <ClockIcon size={14} color="#3B82F6" aria-hidden="true" />,
+              },
+            ] as const
+          ).map((item) => {
+            const isActive = tab === item.id;
+            const href = getDashboardTabPath('library', item.id);
+            return (
+              <a
+                key={item.id}
+                href={href}
+                aria-current={isActive ? 'page' : undefined}
+                onClick={(e) => {
+                  if (isPlainLeftClick(e)) {
+                    e.preventDefault();
+                    handleSelectTab(item.id);
+                  }
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  fontFamily: FONT_MONO,
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  textDecoration: 'none',
+                  borderRadius: oledTheme.radius.sm,
+                  border: `1px solid ${
+                    isActive ? oledTheme.colors.primary : oledTheme.colors.border
+                  }`,
+                  backgroundColor: isActive ? 'rgba(229, 9, 20, 0.15)' : '#0D0D0D',
+                  color: isActive ? '#FFFFFF' : oledTheme.colors.textSecondary,
+                  cursor: 'pointer',
+                }}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </a>
+            );
+          })}
+        </nav>
 
         <Button
           variant="secondary"

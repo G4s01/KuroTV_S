@@ -69,7 +69,34 @@ Questo documento definisce le regole architetturali, i vincoli di dominio, gli s
 
 ---
 
-## 4. Test, Verifica & Rilascio
+## 4. Stile, CAPS LOCK & Icone della Web Console OLED
+
+1. **Tema OLED & Contrasto**:
+   - Mantenere i token in `src/client/theme.ts` (`oledTheme`, `FONT_MONO`): sfondo pitch-black `#000000`, card `#0D0D0D`, superfici `#121212`, bordi `#262626` e accento `#E50914`.
+   - Usare sempre `ConfirmModal.tsx` al posto di `window.confirm`/`alert` nativi.
+
+2. **Tutta la UI in CAPS LOCK (Regola Strettissima)**:
+   - L'intera Web Console (pagine, tab, titoli, `<title>` in `index.html`, label, `<option>`, placeholder, tooltip `title`, `aria-label`, banner di stato, errori, date formattate `.toUpperCase()`, modali di conferma e testi di guida) **DEVE essere scritta e renderizzata in CAPS LOCK**.
+   - `index.html` applica `text-transform: uppercase` su `html, body, input, button, select, option, textarea` e `::placeholder`; inoltre **tutti i copy sorgente e i messaggi runtime/fallback in JSX/TS vanno scritti direttamente in MAIUSCOLO** (necessario per `<option>` nativi, attributi `title`/`aria-label` e coerenza dei testi copiabili/screen reader).
+   - **Vietato** aggiungere `textTransform: 'none'` nei componenti UI.
+   - **Eccezione `.raw-token` (solo valori tecnici case-sensitive)**: la classe `.raw-token` (definita in `index.html` insieme a `input[type="password"]`, `.code-preview` e `.raw-token::placeholder`) va riservata esclusivamente a stringhe tecniche che non devono subire alterazioni CSS in visualizzazione o inserimento: URL di redirect OAuth (`webRedirectUri`, `MAL_MOBILE_REDIRECT_URI`), `Homepage URL` (`webOrigin`), descrizione campione MAL (`MAL_SAMPLE_DESCRIPTION`), input/anteprima `Client ID` MAL e deep link QR (`DevicesView.tsx`). Non applicare `.raw-token` a username UI, nomi profilo, banner o istruzioni testuali.
+
+3. **Icone Colorate Semantiche & Logo MyAnimeList (`MalIcon`)**:
+   - Usare icone SVG da `src/client/components/Icons.tsx` con colori semantici coerenti su tab, intestazioni sezione, badge di stato, dropzone e pulsanti su sfondo scuro (`secondary` / `ghost`):
+     - `#E50914`: primario KuroTV, Android TV, `LIBRERIA`, `CONTINUE WATCHING` (`PlayIcon`), errori/elementi attivi.
+     - `#3B82F6`: `PROFILI` (`UserIcon`), `WATCH HISTORY` (`ClockIcon`), smartphone QR (`QrIcon`), link/modifica/copia (`LinkIcon`, `EditIcon`, `CopyIcon`, `ExternalLinkIcon`).
+     - `#10B981`: `DISPOSITIVI` (`TvIcon`), stati connessi/validi (`CheckIcon`), azioni di aggiornamento (`RefreshIcon`), export backup.
+     - `#F59E0B`: `BACKUP` (`DownloadIcon`, `UploadIcon`), chiavi (`KeyIcon`), guide (`HelpCircleIcon`), avvisi/token scaduti.
+     - `#EC4899`: `FAVORITES` (`HeartIcon`).
+     - `#EF4444`: logout (`LogOutIcon`), avvisi critici ed eliminazioni su pulsanti `ghost`.
+   - **Icona ufficiale MyAnimeList (`MalIcon`)**: usare `<MalIcon />` (cerchio `#2E51A2` con monogramma bianco `#FFFFFF`, allineato a `KuroTV_M`) nella tab `MYANIMELIST` (`App.tsx`), nell'header/guida/fallback avatar di `MalView.tsx` e nello strip stato MAL di `ProfilesView.tsx`.
+   - **Contrasto pulsanti & Accessibilità**:
+     - Sui pulsanti `Button` con `variant="danger"` (sfondo hover `#DC2626` con testo `#FFFFFF`) lasciare `color="currentColor"` sulle icone anziché forzare `#EF4444`; sui pulsanti `variant="primary"` rossi preferire icone chiare (`currentColor`) invece di `MalIcon` blu su rosso.
+     - Aggiungere `aria-hidden="true"` a tutte le icone SVG decorative dentro pulsanti, tab e intestazioni già etichettati, mantenendo `aria-label` coerenti col testo visibile in CAPS LOCK e preservando gli indicatori `:focus-visible` (`index.html`).
+
+---
+
+## 5. Test, Verifica & Rilascio
 
 - La suite di test usa Vitest 4 + `@cloudflare/vitest-plugin` (`vitest.config.ts`) con progetti ordinati tramite `sequence.groupOrder` (`client-sdk`: `0`, `workers`: `1`, `maxWorkers: 2`, `testTimeout`/`hookTimeout: 30000`).
 - Quando si wrappa `env.DB` (`D1Database`) in un `Proxy` nei test (es. `test/health.test.ts`), bindare sempre i metodi restituiti su `target` (`Reflect.get(target, prop, target)` + `.bind(target)`) per compatibilità con i campi privati di Miniflare/`workerd`.

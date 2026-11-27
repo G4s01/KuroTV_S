@@ -20,6 +20,15 @@ import {
   DownloadIcon,
 } from './components/Icons';
 import {
+  DEFAULT_APP_TITLE,
+  getDashboardTabPath,
+  getRouteTitle,
+  isMalCallbackPathname,
+  isPlainLeftClick,
+  parseAppRoute,
+  type DashboardTab,
+} from './router';
+import {
   api,
   type HealthResponse,
   type MalAccountSummary,
@@ -37,7 +46,17 @@ const AVATAR_COLORS = [
   '#64748B',
 ];
 
-export type DashboardTab = 'library' | 'profiles' | 'devices' | 'mal' | 'backup';
+export type { DashboardTab };
+
+function readBrowserLocation(): { pathname: string; search: string } {
+  if (typeof window === 'undefined') {
+    return { pathname: '/', search: '' };
+  }
+  return {
+    pathname: window.location.pathname || '/',
+    search: window.location.search || '',
+  };
+}
 
 export const App: React.FC = () => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -45,11 +64,9 @@ export const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!api.getToken());
   const [profiles, setProfiles] = useState<ProfileRecord[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(api.getActiveProfileId());
-  const [activeTab, setActiveTab] = useState<DashboardTab>('library');
-  const [currentPath, setCurrentPath] = useState<string>(
-    typeof window !== 'undefined' ? window.location.pathname : '/'
+  const [locationState, setLocationState] = useState<{ pathname: string; search: string }>(
+    readBrowserLocation
   );
-  const [pairCodeParam, setPairCodeParam] = useState<string>('');
   const [isTvPairModalOpen, setIsTvPairModalOpen] = useState(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [isCreateProfileModalOpen, setIsCreateProfileModalOpen] = useState(false);
@@ -62,16 +79,22 @@ export const App: React.FC = () => {
   const [malStatusBanner, setMalStatusBanner] = useState<MalViewStatusMessage | null>(null);
   const [malRefreshTick, setMalRefreshTick] = useState(0);
   const [pendingMalCallbackSearch, setPendingMalCallbackSearch] = useState<string | null>(() => {
-    if (
-      typeof window !== 'undefined' &&
-      (window.location.pathname === '/mal-callback' ||
-        window.location.pathname.startsWith('/mal-callback/'))
-    ) {
-      return window.location.search || '?';
-    }
-    return null;
+    const initialLoc = readBrowserLocation();
+    const initialRoute = parseAppRoute(initialLoc.pathname, initialLoc.search);
+    return initialRoute.kind === 'mal-callback' ? initialRoute.search : null;
   });
   const isMountedRef = useRef(true);
+
+  const route = parseAppRoute(locationState.pathname, locationState.search);
+  const activeTab: DashboardTab =
+    route.kind === 'dashboard'
+      ? route.tab
+      : route.kind === 'mal-callback'
+      ? 'mal'
+      : 'library';
+  const activeLibraryTab =
+    route.kind === 'dashboard' ? route.libraryTab : 'continue_watching';
+  const pairCodeParam = route.kind === 'pair' ? route.code : '';
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -83,15 +106,11 @@ export const App: React.FC = () => {
   // Parse path and query params on mount & on popstate
   const updateRouteFromLocation = useCallback(() => {
     if (typeof window === 'undefined') return;
-    const path = window.location.pathname;
-    const searchParams = new URLSearchParams(window.location.search);
-    const code = searchParams.get('code') || '';
-    setCurrentPath(path);
-    if (path === '/mal-callback' || path.startsWith('/mal-callback/')) {
-      setPendingMalCallbackSearch(window.location.search || '?');
-    }
-    if (code) {
-      setPairCodeParam(code);
+    const nextLoc = readBrowserLocation();
+    setLocationState(nextLoc);
+    const parsed = parseAppRoute(nextLoc.pathname, nextLoc.search);
+    if (parsed.kind === 'mal-callback') {
+      setPendingMalCallbackSearch(parsed.search);
     }
   }, []);
 
@@ -101,12 +120,49 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('popstate', updateRouteFromLocation);
   }, [updateRouteFromLocation]);
 
-  const navigate = (path: string) => {
-    if (typeof window !== 'undefined') {
-      window.history.pushState({}, '', path);
-      updateRouteFromLocation();
+  // Normalize non-canonical dashboard paths (e.g. /mal/ or unknown paths) without breaking /pair or /mal-callback
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (route.kind === 'dashboard' && locationState.pathname !== route.canonicalPath) {
+      const nextUrl = `${route.canonicalPath}${locationState.search}`;
+      window.history.replaceState({}, '', nextUrl);
+      setLocationState({ pathname: route.canonicalPath, search: locationState.search });
     }
-  };
+  }, [route, locationState.pathname, locationState.search]);
+
+  // Keep browser tab title synchronized with the active section (CAPS LOCK)
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (loadingHealth) {
+      document.title = DEFAULT_APP_TITLE;
+      return;
+    }
+    if (health && !health.initialized) {
+      document.title = 'SETUP — KUROSYNC';
+      return;
+    }
+    if (!isAuthenticated) {
+      document.title = 'ACCESSO — KUROSYNC';
+      return;
+    }
+    document.title = getRouteTitle(route);
+  }, [loadingHealth, health, isAuthenticated, route]);
+
+  const navigate = useCallback(
+    (path: string, options?: { replace?: boolean }) => {
+      if (typeof window === 'undefined') return;
+      const currentUrl = `${window.location.pathname}${window.location.search}`;
+      if (currentUrl !== path) {
+        if (options?.replace) {
+          window.history.replaceState({}, '', path);
+        } else {
+          window.history.pushState({}, '', path);
+        }
+      }
+      updateRouteFromLocation();
+    },
+    [updateRouteFromLocation]
+  );
 
   // Check health and initialization state
   const checkInstanceHealth = useCallback(async () => {
@@ -163,19 +219,21 @@ export const App: React.FC = () => {
     }
   }, [isAuthenticated, loadProfiles, loadMalAccounts]);
 
+  const handleSelectProfile = useCallback((id: string) => {
+    api.setActiveProfileId(id);
+    setActiveProfileId(id);
+  }, []);
+
   // Complete MyAnimeList OAuth 2.0 PKCE callback redirect (/mal-callback)
   useEffect(() => {
     if (!isAuthenticated || !pendingMalCallbackSearch || typeof window === 'undefined') return;
 
     const search = pendingMalCallbackSearch;
-    if (
-      window.location.pathname === '/mal-callback' ||
-      window.location.pathname.startsWith('/mal-callback/')
-    ) {
-      window.history.replaceState({}, '', '/');
-      setCurrentPath('/');
+    const malPath = getDashboardTabPath('mal');
+    if (isMalCallbackPathname(window.location.pathname)) {
+      window.history.replaceState({}, '', malPath);
+      setLocationState({ pathname: malPath, search: '' });
     }
-    setActiveTab('mal');
     setMalStatusBanner({
       type: 'loading',
       text: 'COMPLETAMENTO COLLEGAMENTO MYANIMELIST IN CORSO...',
@@ -196,12 +254,7 @@ export const App: React.FC = () => {
         loadMalAccounts();
       }
     });
-  }, [isAuthenticated, pendingMalCallbackSearch, loadMalAccounts]);
-
-  const handleSelectProfile = (id: string) => {
-    api.setActiveProfileId(id);
-    setActiveProfileId(id);
-  };
+  }, [isAuthenticated, pendingMalCallbackSearch, loadMalAccounts, handleSelectProfile]);
 
   const handleCreateProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -299,7 +352,7 @@ export const App: React.FC = () => {
   }
 
   // Route: /pair TV Approval View
-  if (currentPath === '/pair' || currentPath.startsWith('/pair/')) {
+  if (route.kind === 'pair') {
     return (
       <TvPairView
         initialCode={pairCodeParam}
@@ -337,10 +390,7 @@ export const App: React.FC = () => {
         onOpenBackup={() => setIsBackupModalOpen(true)}
         onLogout={handleLogout}
         currentRoute={activeTab}
-        onNavigate={(route) => {
-          if (route === '/') setActiveTab('library');
-          navigate('/');
-        }}
+        onNavigate={(routePath) => navigate(routePath)}
       />
 
       {/* Main Content Area */}
@@ -357,7 +407,8 @@ export const App: React.FC = () => {
         }}
       >
         {/* Navigation Tabs */}
-        <div
+        <nav
+          aria-label="SEZIONI CONSOLE"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -397,10 +448,18 @@ export const App: React.FC = () => {
             ] as const
           ).map((tab) => {
             const isActive = activeTab === tab.id;
+            const href = getDashboardTabPath(tab.id);
             return (
-              <button
+              <a
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                href={href}
+                aria-current={isActive ? 'page' : undefined}
+                onClick={(e) => {
+                  if (isPlainLeftClick(e)) {
+                    e.preventDefault();
+                    navigate(href);
+                  }
+                }}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -411,6 +470,7 @@ export const App: React.FC = () => {
                   fontWeight: 700,
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
+                  textDecoration: 'none',
                   borderRadius: oledTheme.radius.sm,
                   border: `1px solid ${isActive ? oledTheme.colors.primary : 'transparent'}`,
                   backgroundColor: isActive ? 'rgba(229, 9, 20, 0.15)' : 'transparent',
@@ -421,13 +481,19 @@ export const App: React.FC = () => {
               >
                 {tab.icon}
                 {tab.label}
-              </button>
+              </a>
             );
           })}
-        </div>
+        </nav>
 
         {/* Tab Views */}
-        {activeTab === 'library' && <LibraryView activeProfileId={activeProfileId} />}
+        {activeTab === 'library' && (
+          <LibraryView
+            activeProfileId={activeProfileId}
+            activeSubTab={activeLibraryTab}
+            onSelectSubTab={(subTab) => navigate(getDashboardTabPath('library', subTab))}
+          />
+        )}
         {activeTab === 'profiles' && (
           <ProfilesView
             profiles={profiles}
@@ -440,7 +506,7 @@ export const App: React.FC = () => {
             onSelectProfile={handleSelectProfile}
             onManageMal={(profileId) => {
               setMalPreselectProfileId(profileId);
-              setActiveTab('mal');
+              navigate(getDashboardTabPath('mal'));
             }}
           />
         )}

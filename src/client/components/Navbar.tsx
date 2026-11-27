@@ -12,6 +12,7 @@ import {
   ChevronDownIcon,
 } from './Icons';
 import type { ProfileRecord } from '../api';
+import { isPlainLeftClick } from '../router';
 
 interface NavbarProps {
   profiles: ProfileRecord[];
@@ -103,14 +104,22 @@ export const Navbar: React.FC<NavbarProps> = ({
       >
         {/* Brand & Status */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div
-            onClick={() => onNavigate('/')}
+          <a
+            href="/"
+            aria-label="TORNA ALLA HOME KUROSYNC"
+            onClick={(e) => {
+              if (isPlainLeftClick(e)) {
+                e.preventDefault();
+                onNavigate('/');
+              }
+            }}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
               cursor: 'pointer',
               userSelect: 'none',
+              textDecoration: 'none',
             }}
           >
             <span
@@ -133,7 +142,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               KUROSYNC
             </span>
-          </div>
+          </a>
 
           <Badge variant={isOnline ? 'success' : 'danger'}>
             {isOnline ? 'ONLINE' : 'OFFLINE'}
