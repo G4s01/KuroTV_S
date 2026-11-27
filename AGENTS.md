@@ -8,7 +8,7 @@ Questo documento definisce le regole architetturali, i vincoli di dominio, gli s
 
 - **Runtime Backend**: Cloudflare Workers + [Hono](https://hono.dev/) (`src/worker/index.ts`, `src/worker/routes/*`, `src/worker/middleware/auth.ts`).
 - **Database**: Cloudflare D1 (SQLite serverless) con migrazioni incrementali in `migrations/` e bootstrap idempotente `ensureSchema()` in `src/worker/schema.ts`.
-- **Web Console OLED**: React 19 + TypeScript + Vite (`src/client/*`), servita tramite Workers Static Assets (`ASSETS` binding, `run_worker_first: ["/api/*"]`). Design OLED pitch-black (`#000000`, `#121212`, `#E50914`), tipografia monospace uppercase, callback OAuth `/mal-callback` (`src/client/malOAuth.ts`, `src/client/views/Dashboard/MalView.tsx`) e modali di conferma in-app (`ConfirmModal.tsx`).
+- **Web Console OLED**: React 19 + TypeScript + Vite (`src/client/*`), servita tramite Workers Static Assets (`ASSETS` binding, `run_worker_first: ["/api/*"]`, `not_found_handling: "single-page-application"`). Design OLED pitch-black (`#000000`, `#121212`, `#E50914`), tipografia monospace uppercase, routing URL persistente via History API (`src/client/router.ts`), callback OAuth `/mal-callback` (`src/client/malOAuth.ts`, `src/client/views/Dashboard/MalView.tsx`) e modali di conferma in-app (`ConfirmModal.tsx`).
 - **Client SDK Condiviso**: `packages/sync-client` (`@kurosync/sync-client`) — puro TypeScript con zero dipendenze runtime, compatibile con Hermes, React Native MMKV, Android TV, Node.js e browser. **Vietato** importare moduli `node:*` in `packages/sync-client/src/*` o `src/worker/*`.
 
 ---
@@ -57,7 +57,7 @@ Questo documento definisce le regole architetturali, i vincoli di dominio, gli s
      - L'associazione diretta dal pannello web (`MalView.tsx` + `/mal-callback`) usa PKCE `plain` senza `client_secret` (compatibile con `App Type: Android` o `other` su `myanimelist.net/apiconfig` e URL redirect dinamico `<window.location.origin>/mal-callback`).
      - `POST /api/mal/oauth/exchange` e `POST /api/mal/accounts/:profileId/refresh` eseguono le chiamate verso `myanimelist.net/v1/oauth2/token` e `api.myanimelist.net/v2/users/@me` lato Worker (evitando CORS browser) e invalidano eventuali tombstones `'mal_auth'` al login.
      - `DELETE /api/mal/accounts/:profileId` rimuove `mal_auth` e scrive il tombstone `'mal_auth'` (`key = 'default'`) per propagare il logout verso `KuroTV_M`.
-     - In `App.tsx`, il callback `/mal-callback` non deve essere annullato dal cleanup di `useEffect` quando la URL viene ripulita con `replaceState('/')` (`pendingMalCallbackSearch` + `isMountedRef`).
+     - In `App.tsx`, il callback `/mal-callback` non deve essere annullato dal cleanup di `useEffect` quando la URL viene ripulita con `replaceState('/mal')` (`pendingMalCallbackSearch` + `isMountedRef`), lasciando l'utente sulla sezione `MYANIMELIST` anche in caso di reload successivo.
 
 3. **Doppio Clock: Logico Client vs Cursore di Replica Server**:
    - LWW e dominanza tombstones usano il timestamp logico client (`updated_at` / `deleted_at`).
@@ -93,6 +93,12 @@ Questo documento definisce le regole architetturali, i vincoli di dominio, gli s
    - **Contrasto pulsanti & Accessibilità**:
      - Sui pulsanti `Button` con `variant="danger"` (sfondo hover `#DC2626` con testo `#FFFFFF`) lasciare `color="currentColor"` sulle icone anziché forzare `#EF4444`; sui pulsanti `variant="primary"` rossi preferire icone chiare (`currentColor`) invece di `MalIcon` blu su rosso.
      - Aggiungere `aria-hidden="true"` a tutte le icone SVG decorative dentro pulsanti, tab e intestazioni già etichettati, mantenendo `aria-label` coerenti col testo visibile in CAPS LOCK e preservando gli indicatori `:focus-visible` (`index.html`).
+
+4. **Routing URL, Persistenza al Reload & Navigazione (`src/client/router.ts`)**:
+   - Le sezioni principali (`LIBRERIA` -> `/library` o `/`, `PROFILI` -> `/profiles`, `DISPOSITIVI` -> `/devices`, `MYANIMELIST` -> `/mal`, `BACKUP` -> `/backup`) e le sub-sezioni di libreria (`CONTINUE WATCHING` -> `/library`, `FAVORITES` -> `/library/favorites`, `WATCH HISTORY` -> `/library/history`) devono restare sincronizzate con `window.location.pathname` tramite `src/client/router.ts` (`parseAppRoute`, `getDashboardTabPath`, `getRouteTitle`) e History API (`pushState`/`replaceState`/`popstate`), mai isolate in uno `useState` effimero.
+   - Usare veri link `<a href>` dentro `<nav>` con `aria-current="page"` e `isPlainLeftClick` (es. tab principali in `App.tsx`, sub-tab in `LibraryView.tsx` e logo in `Navbar.tsx`) per preservare hover preview, apertura in nuova scheda (`Ctrl`/`Cmd`/tasto centrale), history avanti/indietro e accessibilità, mantenendo `textDecoration: 'none'` e il titolo pagina in CAPS LOCK (`getRouteTitle`).
+   - Limitare la normalizzazione automatica del pathname (`replaceState` in `App.tsx`) a `route.kind === 'dashboard'` così i parametri query di `/pair?code=...` e `/mal-callback?...` non vengano alterati prima dell'elaborazione.
+   - Non aggiungere route Worker lato server fuori da `/api/*` che possano intercettare i path SPA (`/library`, `/profiles`, `/devices`, `/mal`, `/backup`, `/pair`, `/mal-callback`) e mantenere `"not_found_handling": "single-page-application"` in `wrangler.jsonc`.
 
 ---
 

@@ -58,6 +58,7 @@ Kuro è una suite coordinata per lo streaming anime concepita per coprire ogni s
 
 ### 🖤 Console Web OLED & Disaster Recovery
 - **Design Nero Assoluto (`#000000`)**: dashboard React 19 + Vite con card `#121212`, accenti `#E50914`, tipografia monospace uppercase e modali di conferma in-app (`ConfirmModal`).
+- **Navigazione URL Persistente**: ogni sezione (`/library`, `/library/favorites`, `/library/history`, `/profiles`, `/devices`, `/mal`, `/backup`, `/pair`) è sincronizzata con la History API e il fallback SPA Cloudflare Workers, mantenendo la sezione attiva al reload della pagina, sui tasti Avanti/Indietro e tramite deep link.
 - **Gestione Completa**: selettore profili, libreria per profilo, associazioni e accessi MyAnimeList (`Client ID` + OAuth PKCE), revoca/rinomina dispositivi, esportazione e ripristino snapshot JSON completo (`/api/sync/export` & `/api/sync/import`).
 
 ---
@@ -180,7 +181,7 @@ npm run build
 ## 📚 Documentazione di Dettaglio
 
 - 🔌 [**Guida Integrazione Client**](./docs/CLIENT_INTEGRATION.md) — Mapping MMKV, debounce player, pairing TV, QR connect e sync `malAuth`
-- 🧪 [**Report Suite di Test**](./TEST_READY.md) — Copertura dettagliata dei 281 test su `workerd` e `@kurosync/sync-client`
+- 🧪 [**Report Suite di Test**](./TEST_READY.md) — Copertura dettagliata dei 288 test su `workerd` e `@kurosync/sync-client`
 - 🤖 [**Istruzioni Agentiche & Regole**](./AGENTS.md) — Vincoli D1/Cloudflare, regole di dominio `malAuth` e pipeline operativa
 - 🗄️ [**Migrazioni Database D1**](./migrations) — Schema SQL incrementale (`0001` → `0003`)
 - 📦 [**Client SDK Condiviso**](./packages/sync-client) — Package TypeScript puro `@kurosync/sync-client`
