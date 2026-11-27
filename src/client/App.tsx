@@ -10,6 +10,8 @@ import { DevicesView } from './views/Dashboard/DevicesView';
 import { BackupView } from './views/Dashboard/BackupView';
 import { MalView, type MalViewStatusMessage } from './views/Dashboard/MalView';
 import { Modal } from './components/Modal';
+import { MobilePairModal } from './components/MobilePairModal';
+import { SecurityModal } from './components/SecurityModal';
 import { Button } from './components/Button';
 import { completeMalOAuthFromSearch } from './malOAuth';
 import {
@@ -67,8 +69,11 @@ export const App: React.FC = () => {
   const [locationState, setLocationState] = useState<{ pathname: string; search: string }>(
     readBrowserLocation
   );
+  const [isMobilePairModalOpen, setIsMobilePairModalOpen] = useState(false);
   const [isTvPairModalOpen, setIsTvPairModalOpen] = useState(false);
+  const [devicesRefreshTick, setDevicesRefreshTick] = useState(0);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [isCreateProfileModalOpen, setIsCreateProfileModalOpen] = useState(false);
   const [newProfileName, setNewProfileName] = useState('');
   const [newProfileColor, setNewProfileColor] = useState('#E50914');
@@ -386,8 +391,10 @@ export const App: React.FC = () => {
           setCreateProfileError(null);
           setIsCreateProfileModalOpen(true);
         }}
+        onOpenMobilePair={() => setIsMobilePairModalOpen(true)}
         onOpenTvPair={() => setIsTvPairModalOpen(true)}
         onOpenBackup={() => setIsBackupModalOpen(true)}
+        onOpenSecurity={() => setIsSecurityModalOpen(true)}
         onLogout={handleLogout}
         currentRoute={activeTab}
         onNavigate={(routePath) => navigate(routePath)}
@@ -514,6 +521,7 @@ export const App: React.FC = () => {
           <DevicesView
             activeProfileId={activeProfileId}
             onOpenTvPair={() => setIsTvPairModalOpen(true)}
+            refreshTrigger={devicesRefreshTick}
           />
         )}
         {activeTab === 'mal' && (
@@ -538,6 +546,18 @@ export const App: React.FC = () => {
         )}
       </main>
 
+      {/* Mobile Pair Quick Modal */}
+      <MobilePairModal
+        isOpen={isMobilePairModalOpen}
+        onClose={() => setIsMobilePairModalOpen(false)}
+        activeProfileId={activeProfileId}
+        profiles={profiles}
+        onSuccess={() => {
+          setDevicesRefreshTick((n) => n + 1);
+          loadProfiles();
+        }}
+      />
+
       {/* TV Pair Quick Modal */}
       <Modal
         isOpen={isTvPairModalOpen}
@@ -550,6 +570,7 @@ export const App: React.FC = () => {
           profiles={profiles}
           onComplete={() => {
             setIsTvPairModalOpen(false);
+            setDevicesRefreshTick((n) => n + 1);
             loadProfiles();
           }}
           onNavigateHome={() => setIsTvPairModalOpen(false)}
@@ -565,6 +586,12 @@ export const App: React.FC = () => {
       >
         <BackupView onRestoreSuccess={loadProfiles} />
       </Modal>
+
+      {/* Security & Master Password Modal */}
+      <SecurityModal
+        isOpen={isSecurityModalOpen}
+        onClose={() => setIsSecurityModalOpen(false)}
+      />
 
       {/* Create Profile Quick Modal */}
       <Modal

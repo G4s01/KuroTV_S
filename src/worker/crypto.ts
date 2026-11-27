@@ -208,3 +208,28 @@ export function generatePairingCode(length = 6): string {
   }
   return code;
 }
+
+/**
+ * Generates an unambiguous 20-character Recovery Key formatted as KURO-XXXX-XXXX-XXXX-XXXX-XXXX
+ * (100 bits of entropy from 32-char unambiguous charset).
+ */
+export function generateRecoveryKey(): string {
+  const raw = generatePairingCode(20);
+  const groups = [
+    raw.slice(0, 4),
+    raw.slice(4, 8),
+    raw.slice(8, 12),
+    raw.slice(12, 16),
+    raw.slice(16, 20),
+  ];
+  return `KURO-${groups.join("-")}`;
+}
+
+/**
+ * Normalizes a Recovery Key (case-insensitive, ignores spaces and dashes)
+ * while preserving the KURO prefix so formatted and compact inputs hash identically.
+ */
+export function normalizeRecoveryKey(raw: string): string {
+  const clean = raw.trim().toUpperCase().replace(/[\s-]+/g, "");
+  return clean.startsWith("KURO") ? clean : `KURO${clean}`;
+}

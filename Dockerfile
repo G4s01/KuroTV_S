@@ -33,7 +33,10 @@ COPY --from=builder /app/dist/server ./dist/server
 COPY migrations ./migrations
 COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
+    printf '#!/bin/sh\nexec node /app/dist/server/index.mjs "$@"\n' > /usr/local/bin/kurosync-reset && \
+    chmod +x /usr/local/bin/kurosync-reset && \
+    mkdir -p /data
 
 VOLUME ["/data"]
 EXPOSE 8787

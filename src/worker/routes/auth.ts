@@ -2,9 +2,12 @@ import { Hono, type Context } from "hono";
 import type { AppEnv } from "../types";
 import {
   verifyPassword,
+  hashPassword,
   timingSafeEqualStrings,
   generateDeviceToken,
   generateSessionToken,
+  generateRecoveryKey,
+  normalizeRecoveryKey,
   hashToken,
 } from "../crypto";
 import { rateLimit } from "../rate-limit";
@@ -502,3 +505,301 @@ async function handleSwitchProfile(c: Context<AppEnv>) {
 
 authRouter.post("/switch-profile", requireAuth, handleSwitchProfile);
 authRouter.post("/auth/switch-profile", requireAuth, handleSwitchProfile);
+
+// Rate limiters for password management & recovery endpoints
+const passwordChangeLimiter = rateLimit({ limit: 10, windowSeconds: 60, prefix: "auth_pwd_change" });
+const passwordResetLimiter = rateLimit({ limit: 5, windowSeconds: 60, prefix: "auth_pwd_reset" });
+
+// Public non-sensitive recovery capability check (used by MasterLogin)
+authRouter.get("/auth/recovery-status", async (c) => {
+  const adminSecretActive = Boolean(
+    c.env.SYNC_ADMIN_SECRET && c.env.SYNC_ADMIN_SECRET.trim().length > 0
+  );
+  if (adminSecretActive) {
+    return c.json({ ok: true, adminSecretActive: true, recoveryConfigured: false }, 200);
+  }
+
+  const config = await c.env.DB.prepare(
+    "SELECT recovery_hash, recovery_salt, setup_completed FROM instance_config WHERE id = 1"
+  ).first<{ recovery_hash: string | null; recovery_salt: string | null; setup_completed: number }>();
+
+  const recoveryConfigured = Boolean(
+    config &&
+      config.setup_completed === 1 &&
+      config.recovery_hash &&
+      config.recovery_salt
+  );
+
+  return c.json({ ok: true, adminSecretActive: false, recoveryConfigured }, 200);
+});
+
+// Authenticated security status for Web Console Security Modal
+authRouter.get("/auth/security", requireAuth, async (c) => {
+  if (c.get("deviceType") !== "web") {
+    return c.json({ error: "Forbidden: security management is restricted to web sessions" }, 403);
+  }
+
+  const adminSecretActive = Boolean(
+    c.env.SYNC_ADMIN_SECRET && c.env.SYNC_ADMIN_SECRET.trim().length > 0
+  );
+  if (adminSecretActive) {
+    return c.json(
+      { ok: true, adminSecretActive: true, recoveryConfigured: false, updatedAt: null },
+      200
+    );
+  }
+
+  const config = await c.env.DB.prepare(
+    "SELECT recovery_hash, recovery_salt, setup_completed, updated_at FROM instance_config WHERE id = 1"
+  ).first<{
+    recovery_hash: string | null;
+    recovery_salt: string | null;
+    setup_completed: number;
+    updated_at: number;
+  }>();
+
+  return c.json(
+    {
+      ok: true,
+      adminSecretActive: false,
+      recoveryConfigured: Boolean(
+        config && config.setup_completed === 1 && config.recovery_hash && config.recovery_salt
+      ),
+      updatedAt: config?.updated_at ?? null,
+    },
+    200
+  );
+});
+
+// Change Master Password (requires active Web session + current password; revokes other Web sessions only)
+authRouter.post("/auth/change-password", requireAuth, passwordChangeLimiter, async (c) => {
+  if (c.get("deviceType") !== "web") {
+    return c.json({ error: "Forbidden: password management is restricted to web sessions" }, 403);
+  }
+
+  if (c.env.SYNC_ADMIN_SECRET && c.env.SYNC_ADMIN_SECRET.trim().length > 0) {
+    return c.json(
+      {
+        error: "Forbidden",
+        message: "Password is managed via SYNC_ADMIN_SECRET environment variable",
+      },
+      403
+    );
+  }
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const currentPassword = body?.currentPassword;
+  const newPassword = body?.newPassword;
+
+  if (!currentPassword || typeof currentPassword !== "string" || currentPassword.trim().length === 0) {
+    return c.json({ error: "currentPassword is required" }, 400);
+  }
+  if (!newPassword || typeof newPassword !== "string" || newPassword.length < 8) {
+    return c.json({ error: "newPassword must be at least 8 characters long" }, 400);
+  }
+
+  const config = await c.env.DB.prepare(
+    "SELECT master_hash, master_salt, setup_completed FROM instance_config WHERE id = 1"
+  ).first<{ master_hash: string; master_salt: string; setup_completed: number }>();
+
+  if (!config || config.setup_completed !== 1) {
+    return c.json({ error: "Unauthorized", message: "Instance is not initialized" }, 401);
+  }
+
+  const isCurrentValid = await verifyPassword(
+    currentPassword,
+    config.master_hash,
+    config.master_salt
+  );
+  if (!isCurrentValid) {
+    return c.json({ error: "Unauthorized", message: "Current master password is invalid" }, 401);
+  }
+
+  const { hash: nextHash, salt: nextSalt } = await hashPassword(newPassword);
+  const now = Date.now();
+  const currentDeviceId = c.get("deviceId");
+
+  const revokeQuery = currentDeviceId
+    ? c.env.DB.prepare(
+        "UPDATE devices SET revoked_at = ? WHERE device_type = 'web' AND id != ? AND revoked_at IS NULL"
+      ).bind(now, currentDeviceId)
+    : c.env.DB.prepare(
+        "UPDATE devices SET revoked_at = ? WHERE device_type = 'web' AND revoked_at IS NULL"
+      ).bind(now);
+
+  const batchRes = await c.env.DB.batch([
+    c.env.DB.prepare(
+      "UPDATE instance_config SET master_hash = ?, master_salt = ?, updated_at = ? WHERE id = 1"
+    ).bind(nextHash, nextSalt, now),
+    revokeQuery,
+  ]);
+
+  const revokedWebSessions = Number(batchRes[1]?.meta?.changes ?? 0);
+
+  return c.json(
+    {
+      ok: true,
+      revokedWebSessions,
+      message: "Master password updated successfully",
+    },
+    200
+  );
+});
+
+// Regenerate Recovery Key (requires active Web session + current Master Password)
+authRouter.post("/auth/recovery-key/regenerate", requireAuth, passwordChangeLimiter, async (c) => {
+  if (c.get("deviceType") !== "web") {
+    return c.json({ error: "Forbidden: recovery management is restricted to web sessions" }, 403);
+  }
+
+  if (c.env.SYNC_ADMIN_SECRET && c.env.SYNC_ADMIN_SECRET.trim().length > 0) {
+    return c.json(
+      {
+        error: "Forbidden",
+        message: "Recovery key is disabled when SYNC_ADMIN_SECRET is active",
+      },
+      403
+    );
+  }
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const password = body?.password;
+  if (!password || typeof password !== "string" || password.trim().length === 0) {
+    return c.json({ error: "password is required" }, 400);
+  }
+
+  const config = await c.env.DB.prepare(
+    "SELECT master_hash, master_salt, setup_completed FROM instance_config WHERE id = 1"
+  ).first<{ master_hash: string; master_salt: string; setup_completed: number }>();
+
+  if (!config || config.setup_completed !== 1) {
+    return c.json({ error: "Unauthorized", message: "Instance is not initialized" }, 401);
+  }
+
+  const isValid = await verifyPassword(password, config.master_hash, config.master_salt);
+  if (!isValid) {
+    return c.json({ error: "Unauthorized", message: "Invalid master password" }, 401);
+  }
+
+  const recoveryKey = generateRecoveryKey();
+  const { hash: recoveryHash, salt: recoverySalt } = await hashPassword(
+    normalizeRecoveryKey(recoveryKey)
+  );
+  const now = Date.now();
+
+  await c.env.DB.prepare(
+    "UPDATE instance_config SET recovery_hash = ?, recovery_salt = ?, updated_at = ? WHERE id = 1"
+  )
+    .bind(recoveryHash, recoverySalt, now)
+    .run();
+
+  return c.json({ ok: true, recoveryKey }, 200);
+});
+
+// Reset forgotten Master Password using single-use Recovery Key (rotates Recovery Key & revokes Web sessions only)
+authRouter.post("/auth/reset-password", passwordResetLimiter, async (c) => {
+  if (c.env.SYNC_ADMIN_SECRET && c.env.SYNC_ADMIN_SECRET.trim().length > 0) {
+    return c.json(
+      {
+        error: "Forbidden",
+        message: "Password reset is disabled because SYNC_ADMIN_SECRET is active",
+      },
+      403
+    );
+  }
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const recoveryKey = body?.recoveryKey;
+  const newPassword = body?.newPassword;
+
+  if (!recoveryKey || typeof recoveryKey !== "string" || recoveryKey.trim().length === 0) {
+    return c.json({ error: "recoveryKey is required" }, 400);
+  }
+  if (!newPassword || typeof newPassword !== "string" || newPassword.length < 8) {
+    return c.json({ error: "newPassword must be at least 8 characters long" }, 400);
+  }
+
+  const config = await c.env.DB.prepare(
+    "SELECT recovery_hash, recovery_salt, setup_completed FROM instance_config WHERE id = 1"
+  ).first<{ recovery_hash: string | null; recovery_salt: string | null; setup_completed: number }>();
+
+  if (
+    !config ||
+    config.setup_completed !== 1 ||
+    !config.recovery_hash ||
+    !config.recovery_salt
+  ) {
+    return c.json(
+      {
+        error: "Unauthorized",
+        message: "Recovery key is not configured for this instance",
+      },
+      401
+    );
+  }
+
+  const normalizedInput = normalizeRecoveryKey(recoveryKey);
+  const isRecoveryValid = await verifyPassword(
+    normalizedInput,
+    config.recovery_hash,
+    config.recovery_salt
+  );
+
+  if (!isRecoveryValid) {
+    return c.json({ error: "Unauthorized", message: "Invalid recovery key" }, 401);
+  }
+
+  const nextRecoveryKey = generateRecoveryKey();
+  const [masterDerived, nextRecoveryDerived] = await Promise.all([
+    hashPassword(newPassword),
+    hashPassword(normalizeRecoveryKey(nextRecoveryKey)),
+  ]);
+  const now = Date.now();
+
+  const batchRes = await c.env.DB.batch([
+    c.env.DB.prepare(`
+      UPDATE instance_config
+      SET master_hash = ?, master_salt = ?, recovery_hash = ?, recovery_salt = ?, updated_at = ?
+      WHERE id = 1
+    `).bind(
+      masterDerived.hash,
+      masterDerived.salt,
+      nextRecoveryDerived.hash,
+      nextRecoveryDerived.salt,
+      now
+    ),
+    c.env.DB.prepare(
+      "UPDATE devices SET revoked_at = ? WHERE device_type = 'web' AND revoked_at IS NULL"
+    ).bind(now),
+  ]);
+
+  const revokedWebSessions = Number(batchRes[1]?.meta?.changes ?? 0);
+
+  return c.json(
+    {
+      ok: true,
+      recoveryKey: nextRecoveryKey,
+      revokedWebSessions,
+      message: "Master password reset successfully",
+    },
+    200
+  );
+});

@@ -5,6 +5,7 @@ import { serve, type HttpBindings, type ServerType } from "@hono/node-server";
 import workerApp from "../worker/index";
 import { purgeExpiredPairingCodes, purgeOldTombstones } from "../worker/maintenance";
 import { resetSchemaInitCache } from "../worker/schema";
+import { applyPasswordResetIfChanged } from "./cli-reset";
 import { SqliteD1Database } from "./d1-sqlite";
 import { runMigrations } from "./migrations";
 import { normalizeProxyRequest, resolvePublicOrigin } from "./proxy";
@@ -21,6 +22,7 @@ export interface KuroNodeServerOptions {
   trustProxy?: boolean;
   publicUrl?: string;
   syncAdminSecret?: string;
+  resetPassword?: string;
   maxBodyBytes?: number;
   maintenanceIntervalMs?: number;
 }
@@ -152,6 +154,7 @@ export async function createKuroNodeServer(
   const trustProxy = options.trustProxy ?? parseBooleanEnv(process.env.TRUST_PROXY, true);
   const publicOrigin = resolvePublicOrigin(options.publicUrl ?? process.env.PUBLIC_URL);
   const syncAdminSecret = options.syncAdminSecret ?? process.env.SYNC_ADMIN_SECRET;
+  const resetPassword = options.resetPassword ?? process.env.KUROSYNC_RESET_PASSWORD;
   const maxBodyBytes = options.maxBodyBytes ?? parseIntEnv(process.env.MAX_BODY_BYTES, DEFAULT_MAX_BODY_BYTES);
   const maintenanceIntervalMs =
     options.maintenanceIntervalMs ??
@@ -178,6 +181,19 @@ export async function createKuroNodeServer(
 
   try {
     await runMigrations(db, migrationsDir);
+    if (!readOnly && resetPassword && resetPassword.trim().length > 0) {
+      const resetOutcome = await applyPasswordResetIfChanged(db, resetPassword);
+      if (resetOutcome.applied) {
+        console.log(
+          JSON.stringify({
+            level: "info",
+            event: "master_password_reset_from_env",
+            revokedWebSessions: resetOutcome.revokedWebSessions,
+            note: "You can remove KUROSYNC_RESET_PASSWORD from environment once verified.",
+          })
+        );
+      }
+    }
   } catch (err) {
     db.closeGracefully();
     throw err;

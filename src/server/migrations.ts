@@ -43,6 +43,12 @@ function seedLegacyMigrationRecords(db: SqliteD1Database, files: string[]): void
   if (files.includes("0003_mal_auth.sql") && tableExists(db, "mal_auth")) {
     insert.run("0003_mal_auth.sql");
   }
+  if (
+    files.includes("0004_recovery_key.sql") &&
+    columnExists(db, "instance_config", "recovery_hash")
+  ) {
+    insert.run("0004_recovery_key.sql");
+  }
 }
 
 /**

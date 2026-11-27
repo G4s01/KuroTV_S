@@ -1,6 +1,12 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
-import { hashPassword, generateSessionToken, hashToken } from "../crypto";
+import {
+  hashPassword,
+  generateSessionToken,
+  generateRecoveryKey,
+  normalizeRecoveryKey,
+  hashToken,
+} from "../crypto";
 import { rateLimit } from "../rate-limit";
 
 export const setupRouter = new Hono<AppEnv>();
@@ -57,27 +63,62 @@ setupRouter.post("/setup", async (c) => {
       ? body.initialProfileName.trim()
       : "Principale";
 
-  // 4. Derive PBKDF2 hash with random 16-byte salt
-  const { hash: masterHash, salt: saltHex } = await hashPassword(masterPassword);
+  // 4. Derive PBKDF2 hashes for master password & recovery key
+  const recoveryKey = generateRecoveryKey();
+  const [masterDerived, recoveryDerived, existingProfile] = await Promise.all([
+    hashPassword(masterPassword),
+    hashPassword(normalizeRecoveryKey(recoveryKey)),
+    c.env.DB.prepare("SELECT id, name FROM profiles ORDER BY created_at ASC LIMIT 1").first<{
+      id: string;
+      name: string;
+    }>(),
+  ]);
+
   const now = Date.now();
-  const profileId = crypto.randomUUID();
+  const isReopenedSetup = Boolean(existingProfile);
+  const profileId = existingProfile ? existingProfile.id : crypto.randomUUID();
+  const resolvedProfileName = existingProfile ? existingProfile.name : initialProfileName;
 
   // 5. Build atomic D1 batch operations
-  const batchQueries = [
+  const batchQueries: D1PreparedStatement[] = [
     c.env.DB.prepare(`
-      INSERT INTO instance_config (id, master_hash, master_salt, setup_completed, created_at, updated_at)
-      VALUES (1, ?, ?, 1, ?, ?)
+      INSERT INTO instance_config (
+        id, master_hash, master_salt, recovery_hash, recovery_salt,
+        setup_completed, created_at, updated_at
+      )
+      VALUES (1, ?, ?, ?, ?, 1, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         master_hash = excluded.master_hash,
         master_salt = excluded.master_salt,
+        recovery_hash = excluded.recovery_hash,
+        recovery_salt = excluded.recovery_salt,
         setup_completed = 1,
         updated_at = excluded.updated_at
-    `).bind(masterHash, saltHex, now, now),
-    c.env.DB.prepare(`
-      INSERT INTO profiles (id, name, avatar_color, created_at, updated_at)
-      VALUES (?, ?, '#E50914', ?, ?)
-    `).bind(profileId, initialProfileName, now, now),
+    `).bind(
+      masterDerived.hash,
+      masterDerived.salt,
+      recoveryDerived.hash,
+      recoveryDerived.salt,
+      now,
+      now
+    ),
   ];
+
+  if (!isReopenedSetup) {
+    batchQueries.push(
+      c.env.DB.prepare(`
+        INSERT INTO profiles (id, name, avatar_color, created_at, updated_at)
+        VALUES (?, ?, '#E50914', ?, ?)
+      `).bind(profileId, resolvedProfileName, now, now)
+    );
+  } else {
+    // Reopened setup: revoke stale web sessions while preserving mobile/TV devices
+    batchQueries.push(
+      c.env.DB.prepare(
+        "UPDATE devices SET revoked_at = ? WHERE device_type = 'web' AND revoked_at IS NULL"
+      ).bind(now)
+    );
+  }
 
   let sessionToken: string | undefined;
   let deviceId: string | undefined;
@@ -105,9 +146,10 @@ setupRouter.post("/setup", async (c) => {
       sessionToken,
       token: sessionToken,
       deviceId,
+      recoveryKey,
       profile: {
         id: profileId,
-        name: initialProfileName,
+        name: resolvedProfileName,
       },
       message: "Instance initialized successfully",
     },

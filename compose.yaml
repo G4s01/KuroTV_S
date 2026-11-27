@@ -39,6 +39,7 @@ services:
       TRUST_PROXY: "${TRUST_PROXY:-true}"
       PUBLIC_URL: "${PUBLIC_URL:-}"
       SYNC_ADMIN_SECRET: "${SYNC_ADMIN_SECRET:-}"
+      KUROSYNC_RESET_PASSWORD: "${KUROSYNC_RESET_PASSWORD:-}"
       MAX_BODY_BYTES: "${MAX_BODY_BYTES:-52428800}"
 
     # Directory esterna persistente (database SQLite e file WAL) + controllo :rw / :ro

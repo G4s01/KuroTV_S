@@ -1,18 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { oledTheme, FONT_MONO } from '../../theme';
 import { Button } from '../../components/Button';
 import { Badge } from '../../components/Badge';
 import { Modal } from '../../components/Modal';
 import { ConfirmModal } from '../../components/ConfirmModal';
-import { QrCode } from '../../components/QrCode';
+import { MobilePairModal } from '../../components/MobilePairModal';
 import {
   TvIcon,
   MobileIcon,
   WebIcon,
   TrashIcon,
   RefreshIcon,
-  CopyIcon,
-  CheckIcon,
   QrIcon,
 } from '../../components/Icons';
 import { api, type DeviceRecord } from '../../api';
@@ -20,27 +18,21 @@ import { api, type DeviceRecord } from '../../api';
 interface DevicesViewProps {
   activeProfileId: string | null;
   onOpenTvPair: () => void;
+  refreshTrigger?: number;
 }
 
 export const DevicesView: React.FC<DevicesViewProps> = ({
   activeProfileId,
   onOpenTvPair,
+  refreshTrigger = 0,
 }) => {
   const [devices, setDevices] = useState<DeviceRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
 
-  // QR Modal & Ephemeral Single-Use Token
+  // QR Modal state
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
-  const [qrToken, setQrToken] = useState<string | null>(null);
-  const [qrExpiresAt, setQrExpiresAt] = useState<number | null>(null);
-  const [qrLoading, setQrLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [loginSuccess, setLoginSuccess] = useState(false);
-  const modalOpenedAtRef = useRef<number>(0);
-  const initialDeviceIdsRef = useRef<Set<string>>(new Set());
 
   // Edit Device Name Modal State
   const [editingDevice, setEditingDevice] = useState<DeviceRecord | null>(null);
@@ -88,7 +80,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
     action: async () => {},
   });
 
-  const fetchDevices = async () => {
+  const fetchDevices = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -103,143 +95,11 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeProfileId]);
 
   useEffect(() => {
     fetchDevices();
-  }, [activeProfileId]);
-
-  // Generate a fresh Single-Use Ephemeral QR token when opening modal
-  const generateQrToken = async () => {
-    setQrLoading(true);
-    setError(null);
-    try {
-      const res = await api.createQrToken(activeProfileId || undefined);
-      setQrToken(res.qrToken);
-      setQrExpiresAt(res.expiresAt);
-    } catch (err: any) {
-      setError(
-        err?.message ? String(err.message).toUpperCase() : 'IMPOSSIBILE GENERARE IL TOKEN QR MONOUSO.'
-      );
-    } finally {
-      setQrLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (isQrModalOpen) {
-      setLoginSuccess(false);
-      modalOpenedAtRef.current = Date.now();
-      initialDeviceIdsRef.current = new Set(devices.map((d) => d.id));
-      generateQrToken();
-    } else {
-      setQrToken(null);
-      setQrExpiresAt(null);
-      setTimeLeft(null);
-      setLoginSuccess(false);
-    }
-  }, [isQrModalOpen, activeProfileId]);
-
-  // Real-time Countdown Timer for Ephemeral QR
-  useEffect(() => {
-    if (!qrExpiresAt) {
-      setTimeLeft(null);
-      return;
-    }
-    const updateCountdown = () => {
-      const remaining = Math.max(0, Math.floor((qrExpiresAt - Date.now()) / 1000));
-      setTimeLeft(remaining);
-    };
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
-  }, [qrExpiresAt]);
-
-  // Auto-close polling: detects when device exchanges the QR token (dual-check)
-  useEffect(() => {
-    if (!isQrModalOpen || !qrToken || loginSuccess) return;
-
-    let isSubscribed = true;
-    const pollInterval = setInterval(async () => {
-      try {
-        let detected = false;
-
-        // 1. Primary check: Ephemeral QR token status query
-        try {
-          const info = await api.getPairInfo(qrToken);
-          if (info && info.status === 'consumed') {
-            detected = true;
-          }
-        } catch {
-          // Token query fallback ignore
-        }
-
-        // 2. Secondary check: Direct devices listing check
-        if (!detected) {
-          try {
-            const devRes = await api.listDevices(activeProfileId || undefined);
-            if (devRes && Array.isArray(devRes.devices)) {
-              const hasNewDevice = devRes.devices.some(
-                (d) =>
-                  !initialDeviceIdsRef.current.has(d.id) &&
-                  !d.revoked_at &&
-                  (d.created_at >= modalOpenedAtRef.current - 3000 ||
-                    (d.last_seen_at && d.last_seen_at >= modalOpenedAtRef.current - 3000))
-              );
-              if (hasNewDevice) {
-                detected = true;
-              }
-            }
-          } catch {
-            // Devices check ignore
-          }
-        }
-
-        if (detected && isSubscribed) {
-          setLoginSuccess(true);
-          fetchDevices().catch(() => {});
-        }
-      } catch {
-        // Polling loop ignore
-      }
-    }, 2200);
-
-    return () => {
-      isSubscribed = false;
-      clearInterval(pollInterval);
-    };
-  }, [isQrModalOpen, qrToken, loginSuccess, activeProfileId]);
-
-  // Auto-close modal after successful QR login
-  useEffect(() => {
-    if (!loginSuccess) return;
-    const timer = setTimeout(() => {
-      setIsQrModalOpen(false);
-      setLoginSuccess(false);
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [loginSuccess]);
-
-  const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://kurosync.workers.dev';
-  const connectUrl = qrToken
-    ? `kurosync://connect?url=${encodeURIComponent(origin)}&token=${encodeURIComponent(
-        qrToken
-      )}&profile=${encodeURIComponent(activeProfileId || '')}`
-    : '';
-
-  const handleCopyConnectUrl = () => {
-    if (connectUrl && navigator.clipboard) {
-      navigator.clipboard.writeText(connectUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
+  }, [fetchDevices, refreshTrigger]);
 
   // Revoke device dialog
   const handleRevoke = (id: string, name: string) => {
@@ -698,221 +558,12 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
       )}
 
       {/* Connect Smartphone Modal with Ephemeral Single-Use QR Code */}
-      <Modal
+      <MobilePairModal
         isOpen={isQrModalOpen}
-        onClose={() => {
-          setIsQrModalOpen(false);
-          setLoginSuccess(false);
-        }}
-        title="COLLEGA SMARTPHONE"
-        maxWidth="460px"
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-          {loginSuccess ? (
-            <div
-              style={{
-                padding: '24px 16px',
-                backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                border: '1px solid #10B981',
-                borderRadius: oledTheme.radius.sm,
-                color: '#10B981',
-                fontFamily: FONT_MONO,
-                fontWeight: 700,
-                fontSize: '14px',
-                textAlign: 'center',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '12px',
-                width: '100%',
-                boxSizing: 'border-box',
-              }}
-            >
-              <div
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  backgroundColor: '#10B981',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#000000',
-                }}
-              >
-                <CheckIcon size={24} />
-              </div>
-              <span>ACCESSO EFFETTUATO CON SUCCESSO!</span>
-              <span style={{ fontSize: '11px', color: oledTheme.colors.textMuted }}>
-                CHIUSURA POP-UP IN CORSO...
-              </span>
-            </div>
-          ) : (
-            <>
-              <div
-                style={{
-                  fontFamily: FONT_MONO,
-                  fontSize: '11px',
-                  color: oledTheme.colors.textSecondary,
-                  textAlign: 'center',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                }}
-              >
-                SCANSIONA DA KUROTV MOBILE (IMPOSTAZIONI &gt; SINCRONIZZAZIONE)
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  minHeight: '220px',
-                  width: '100%',
-                }}
-              >
-                {qrLoading ? (
-                  <div
-                    style={{
-                      fontFamily: FONT_MONO,
-                      fontSize: '12px',
-                      color: oledTheme.colors.textMuted,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                    }}
-                  >
-                    GENERAZIONE TOKEN...
-                  </div>
-                ) : timeLeft !== null && timeLeft <= 0 ? (
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '24px',
-                      border: `1px solid ${oledTheme.colors.border}`,
-                      borderRadius: oledTheme.radius.sm,
-                      backgroundColor: '#0A0A0A',
-                    }}
-                  >
-                    <span style={{ color: '#EF4444', fontFamily: FONT_MONO, fontSize: '13px', fontWeight: 700 }}>
-                      TOKEN SCADUTO
-                    </span>
-                    <Button variant="primary" size="sm" onClick={generateQrToken}>
-                      RIGENERA QR
-                    </Button>
-                  </div>
-                ) : connectUrl ? (
-                  <QrCode value={connectUrl} size={210} />
-                ) : (
-                  <Button variant="secondary" size="sm" onClick={generateQrToken}>
-                    GENERA QR CODE
-                  </Button>
-                )}
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  width: '100%',
-                  padding: '6px 0',
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: FONT_MONO,
-                    fontSize: '11px',
-                    color: timeLeft !== null && timeLeft < 60 ? '#EF4444' : '#10B981',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontWeight: 700,
-                  }}
-                >
-                  <span
-                    style={{
-                      width: '6px',
-                      height: '6px',
-                      borderRadius: '50%',
-                      backgroundColor: timeLeft !== null && timeLeft < 60 ? '#EF4444' : '#10B981',
-                    }}
-                  />
-                  {timeLeft !== null && timeLeft > 0
-                    ? `SCADENZA: ${formatTime(timeLeft)}`
-                    : 'SCADUTO'}
-                </span>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={generateQrToken}
-                  loading={qrLoading}
-                  icon={<RefreshIcon size={12} color="#10B981" aria-hidden="true" />}
-                >
-                  RIGENERA QR
-                </Button>
-              </div>
-
-              <div style={{ width: '100%', boxSizing: 'border-box' }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontFamily: FONT_MONO,
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    color: oledTheme.colors.textMuted,
-                    marginBottom: '4px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                  }}
-                >
-                  DEEP LINK DIRETTO
-                </label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    type="text"
-                    readOnly
-                    value={connectUrl}
-                    className="raw-token"
-                    placeholder="GENERAZIONE IN CORSO..."
-                    style={{
-                      flex: 1,
-                      padding: '8px 10px',
-                      backgroundColor: '#050505',
-                      border: `1px solid ${oledTheme.colors.border}`,
-                      borderRadius: oledTheme.radius.sm,
-                      color: '#FFFFFF',
-                      fontFamily: FONT_MONO,
-                      fontSize: '11px',
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleCopyConnectUrl}
-                    disabled={!connectUrl}
-                    icon={
-                      copied ? (
-                        <CheckIcon size={14} color="#10B981" aria-hidden="true" />
-                      ) : (
-                        <CopyIcon size={14} color="#3B82F6" aria-hidden="true" />
-                      )
-                    }
-                  >
-                    {copied ? 'COPIATO' : 'COPIA'}
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </Modal>
+        onClose={() => setIsQrModalOpen(false)}
+        activeProfileId={activeProfileId}
+        onSuccess={fetchDevices}
+      />
 
       {/* Edit Device Name Modal */}
       <Modal

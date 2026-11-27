@@ -16,9 +16,23 @@ export interface SetupResponse {
   sessionToken?: string;
   token?: string;
   deviceId?: string;
+  recoveryKey?: string;
   profile?: { id: string; name: string };
   error?: string;
   message?: string;
+}
+
+export interface RecoveryStatusResponse {
+  ok: boolean;
+  adminSecretActive: boolean;
+  recoveryConfigured: boolean;
+}
+
+export interface SecurityStatusResponse {
+  ok: boolean;
+  adminSecretActive: boolean;
+  recoveryConfigured: boolean;
+  updatedAt: number | null;
 }
 
 export interface LoginResponse {
@@ -303,6 +317,57 @@ export class KuroSyncApi {
       this.setActiveProfileId(res.profileId);
     }
     return res;
+  }
+
+  /**
+   * Password & Recovery Key Management
+   */
+  public async getRecoveryStatus(): Promise<RecoveryStatusResponse> {
+    return this.request<RecoveryStatusResponse>('/api/auth/recovery-status');
+  }
+
+  public async getSecurityStatus(): Promise<SecurityStatusResponse> {
+    return this.request<SecurityStatusResponse>('/api/auth/security');
+  }
+
+  public async changeMasterPassword(
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ ok: boolean; revokedWebSessions: number; message: string }> {
+    return this.request<{ ok: boolean; revokedWebSessions: number; message: string }>(
+      '/api/auth/change-password',
+      {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      }
+    );
+  }
+
+  public async regenerateRecoveryKey(
+    password: string
+  ): Promise<{ ok: boolean; recoveryKey: string }> {
+    return this.request<{ ok: boolean; recoveryKey: string }>(
+      '/api/auth/recovery-key/regenerate',
+      {
+        method: 'POST',
+        body: JSON.stringify({ password }),
+      }
+    );
+  }
+
+  public async resetPasswordWithRecoveryKey(
+    recoveryKey: string,
+    newPassword: string
+  ): Promise<{ ok: boolean; recoveryKey: string; revokedWebSessions: number; message: string }> {
+    return this.request<{
+      ok: boolean;
+      recoveryKey: string;
+      revokedWebSessions: number;
+      message: string;
+    }>('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ recoveryKey, newPassword }),
+    });
   }
 
   /**

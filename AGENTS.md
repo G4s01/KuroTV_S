@@ -33,6 +33,7 @@ Questo documento definisce le regole architetturali, i vincoli di dominio, gli s
 
 4. **Sicurezza & Crittografia Web Crypto**:
    - Autenticazione Master via `SYNC_ADMIN_SECRET` (se configurato) oppure PBKDF2-SHA256 (100.000 iterazioni, salt random 16 byte in `instance_config`), con confronto timing-safe (`crypto.subtle.timingSafeEqual`).
+   - La Recovery Key per reset password (`recovery_hash` / `recovery_salt` in `instance_config`, migrazione `0004_recovery_key.sql`) usa lo stesso PBKDF2-SHA256 normalizzato (`KURO-XXXX-...`), ruota ad ogni reset o rigenerazione, e il cambio/reset password revoca solo le (altre) sessioni `web` lasciando collegati `mobile` e `tv`.
    - I token dispositivo vengono salvati esclusivamente come hash SHA-256 (`devices.token_hash`).
    - I token QR monouso (`/api/auth/qr-token` -> `/api/auth/exchange`) e i codici pairing TV (`/api/pair/*`) devono essere consumati atomicamente (`UPDATE ... WHERE status = 'approved'`).
 

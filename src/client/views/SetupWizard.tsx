@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { oledTheme, FONT_MONO } from '../theme';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
-import { Badge } from '../components/Badge';
-import { KeyIcon, ShieldIcon, CheckIcon } from '../components/Icons';
+import { RecoveryKeyBox } from '../components/RecoveryKeyBox';
+import { ShieldIcon, CheckIcon } from '../components/Icons';
 import { api } from '../api';
 
 const AVATAR_COLORS = [
@@ -29,6 +29,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [generatedRecoveryKey, setGeneratedRecoveryKey] = useState<string | null>(null);
+  const [savedConfirmed, setSavedConfirmed] = useState(false);
 
   const generateSecurePassword = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*';
@@ -62,8 +64,12 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
 
     setLoading(true);
     try {
-      await api.setup(masterPassword, profileName.trim(), avatarColor);
-      onSetupSuccess();
+      const res = await api.setup(masterPassword, profileName.trim(), avatarColor);
+      if (res.recoveryKey) {
+        setGeneratedRecoveryKey(res.recoveryKey);
+      } else {
+        onSetupSuccess();
+      }
     } catch (err: any) {
       setError(err?.message ? err.message.toUpperCase() : 'INIZIALIZZAZIONE FALLITA. RIPROVA.');
     } finally {
@@ -126,7 +132,46 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
         </div>
 
         <Card style={{ backgroundColor: '#0A0A0A', border: `1px solid ${oledTheme.colors.border}` }}>
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {generatedRecoveryKey ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <RecoveryKeyBox
+                recoveryKey={generatedRecoveryKey}
+                title="SALVA LA TUA RECOVERY KEY"
+                subtitle="ISTANZA INIZIALIZZATA! CONSERVA QUESTA CHIAVE DI RECUPERO IN UN LUOGO SICURO: TI PERMETTERÀ DI RESETTARE LA MASTER PASSWORD SE LA DIMENTICHI."
+              />
+
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontFamily: FONT_MONO,
+                  fontSize: '11px',
+                  color: oledTheme.colors.textSecondary,
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={savedConfirmed}
+                  onChange={(e) => setSavedConfirmed(e.target.checked)}
+                />
+                <span>HO SALVATO LA RECOVERY KEY IN UN LUOGO SICURO</span>
+              </label>
+
+              <Button
+                type="button"
+                variant="primary"
+                size="lg"
+                disabled={!savedConfirmed}
+                onClick={onSetupSuccess}
+                style={{ width: '100%' }}
+              >
+                ACCEDI ALLA CONSOLE
+              </Button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {error && (
               <div
                 style={{
@@ -348,6 +393,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
               INIZIALIZZA ISTANZA
             </Button>
           </form>
+          )}
         </Card>
       </div>
     </div>

@@ -41,9 +41,9 @@
 
 ## 🐳 Self-Hosting Docker (Dockhand, Portainer, Dockge, Compose)
 
-### 1. Compose Standalone (Pronto da incollare)
+### 1. Compose Basilare (Host Mode)
 
-Se hai già un host Docker pronto e vuoi incollare lo stack direttamente su **Dockhand**, **Portainer**, **Dockge** o **Dockerman** senza clonare la repository, usa questo esempio modificando porta, percorso dati e permessi:
+Esempio minimo pronto da incollare in **Dockhand**, **Portainer**, **Dockge** o `compose.yaml`, con directory dati esterna su `/mnt/data/docker/KuroTV_S`, `network_mode: host` e porta configurabile tramite `PORT`:
 
 ```yaml
 services:
@@ -51,65 +51,35 @@ services:
     image: ghcr.io/g4s01/kurotv_s:latest
     container_name: kurotv-s
     restart: unless-stopped
-
-    # Permessi: imposta UID:GID del tuo utente host (es. `id -u` e `id -g`).
-    # La cartella dati sull'host deve esistere ed essere scrivibile da tale UID:GID.
-    # Se preferisci che il container sistemi automaticamente i permessi di /data all'avvio,
-    # commenta `user:` e `cap_drop:` (l'entrypoint userà PUID/PGID tramite su-exec).
-    user: "1000:1000"
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-
-    # Root filesystem del container in sola lettura (scrivibile solo /data se :rw)
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=16m
-
-    # Porta (Bridge mode). Per Host mode: commenta `ports:`, decommenta `network_mode: host`
-    # e imposta la porta desiderata su `PORT` sotto.
-    # network_mode: host
-    ports:
-      - "8787:8787"
-
+    network_mode: host
     environment:
-      PORT: "8787"                      # Porta di ascolto interna (allineata a ports o host mode)
-      PUID: "1000"                      # Usato dall'entrypoint solo se `user:` è commentato
-      PGID: "1000"                      # Usato dall'entrypoint solo se `user:` è commentato
-      KUROSYNC_DATA_DIR: /data          # Directory dati nel container
-      KUROSYNC_DB_PATH: /data/kurosync.db
-      KUROSYNC_READ_ONLY: "false"       # "true" per avviare il database in sola lettura
-      TRUST_PROXY: "true"               # "true" dietro reverse proxy (NPM, Traefik, Caddy)
-      PUBLIC_URL: ""                    # Opzionale: es. "https://kurosync.tuodominio.it"
-      SYNC_ADMIN_SECRET: ""             # Opzionale: password fissa da env (disabilita Setup Wizard)
-      MAX_BODY_BYTES: "52428800"        # Limite payload upload/import backup (50 MB)
-
+      PORT: "8787"
     volumes:
-      # Cartella esterna persistente su host -> /data (:rw lettura/scrittura, :ro sola lettura)
-      - /percorso/tuoi/dati/kurosync:/data:rw
-
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "node -e \"fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/api/health').then(r=>r.json()).then(d=>process.exit(d&&d.ok?0:1)).catch(()=>process.exit(1))\"",
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
-    # Opzionale: collega il container alla rete Docker esterna del reverse proxy (es. NPM)
-    # networks:
-    #   - npm_proxy
-
-# networks:
-#   npm_proxy:
-#     external: true
+      - /mnt/data/docker/KuroTV_S:/data
 ```
 
-### 2. Avvio da Repository (con `.env` o build locale)
+### 2. Parametri e Flag Aggiuntivi (Compose & Environment)
+
+| Parametro / Variabile | Default | Descrizione |
+| :--- | :--- | :--- |
+| `ports` *(al posto di `network_mode: host`)* | `8787:8787` | Espone la porta in **Bridge Mode** (es. `"9090:9090"` insieme a `PORT: "9090"`, o `"127.0.0.1:8787:8787"`). |
+| `networks` | — | Collega il container alla rete Docker esterna di NPM (es. `npm_proxy`) per raggiungerlo come `http://kurotv-s:8787` senza esporre porte sull'host. |
+| `user` | — *(entrypoint `1000:1000`)* | Forza `UID:GID` da Compose (es. `"1000:1000"`); richiede che la cartella host esista e sia scrivibile da tale utente. |
+| `PUID` / `PGID` *(env)* | `1000` / `1000` | Usati dall'entrypoint (`su-exec`) quando `user:` non è impostato: adegua automaticamente il proprietario di `/data` ed esegue Node senza `root`. |
+| `volumes` suffix (`:rw` / `:ro`) | `:rw` | Controlla i permessi di scrittura (`:rw`) o sola lettura (`:ro`) sul bind mount `/data`. |
+| `read_only` + `tmpfs` | `false` | Con `read_only: true` e `tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]` rende immutabile il filesystem del container eccetto `/data`. |
+| `cap_drop` / `security_opt` | — | Hardening consigliato quando `user:` è impostato (`cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`). |
+| `HOST` / `PORT` | `0.0.0.0` / `8787` | Indirizzo e porta di ascolto interni del server Node (letti anche dal `HEALTHCHECK` integrato). |
+| `KUROSYNC_DATA_DIR` / `KUROSYNC_DB_PATH` | `/data` / `/data/kurosync.db` | Directory dati e percorso file del database SQLite nel container. |
+| `KUROSYNC_READ_ONLY` | `false` | Con `true` apre SQLite in sola lettura: consente le `GET` ed esclude le scritture con HTTP `403` (abbinabile a `:ro` su DB esistente). |
+| `TRUST_PROXY` | `true` | Usa `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-For` e `X-Real-IP` da NPM; imposta `false` senza reverse proxy. |
+| `PUBLIC_URL` | `""` | Forza l'origin pubblico (es. `"https://kurosync.tuodominio.it"`) nei link di pairing TV (`/pair`), ignorando gli header proxy. |
+| `SYNC_ADMIN_SECRET` | `""` | Se impostato, disabilita il Setup Wizard e impone questa Master Password fissa da ambiente. |
+| `KUROSYNC_RESET_PASSWORD` | `""` | Reset di emergenza all'avvio (idempotente): aggiorna la password nel DB mantenendo mobile/TV attivi; rimuoverla dopo l'uso. |
+| `MAX_BODY_BYTES` | `52428800` | Limite massimo payload JSON in byte per sync push e import backup (default `50 MB`). |
+| `MAINTENANCE_INTERVAL_MS` | `21600000` | Intervallo in ms per la pulizia automatica di tombstones (>90g) e codici pairing (>24h); `0` disabilita il timer. |
+
+### 3. Avvio da Repository (con `.env` o build locale)
 
 ```bash
 git clone https://github.com/G4s01/KuroTV_S.git && cd KuroTV_S
@@ -118,11 +88,11 @@ mkdir -p ./data
 docker compose up -d          # oppure `--build` per compilare da sorgente
 ```
 
-Tutti i parametri (`KUROSYNC_DATA_DIR`, `KUROSYNC_DATA_MODE`, `KUROSYNC_READ_ONLY`, `PUID`, `PGID`, `KUROSYNC_PORT`, `TRUST_PROXY`, `PUBLIC_URL`, `SYNC_ADMIN_SECRET`) sono documentati in [`.env.example`](./.env.example) e [`compose.yaml`](./compose.yaml).
+I riferimenti completi sono in [`compose.yaml`](./compose.yaml) e [`.env.example`](./.env.example).
 
-### 3. Reverse Proxy con Nginx Proxy Manager (NPM)
+### 4. Reverse Proxy con Nginx Proxy Manager (NPM)
 
-1. **Details**: `Scheme: http` · `Forward Hostname / IP`: `kurotv-s` (rete Docker condivisa), `127.0.0.1` (host mode) o IP dell'host · `Forward Port`: `8787` (o il tuo `PORT`).
+1. **Details**: `Scheme: http` · `Forward Hostname / IP`: `127.0.0.1` (host mode), `kurotv-s` (rete Docker condivisa) o IP dell'host · `Forward Port`: `8787` (o il tuo `PORT`).
 2. **SSL**: certificato Let's Encrypt, **Force SSL** e **HTTP/2 Support**.
 3. **Advanced** *(per import backup JSON grandi)*:
    ```nginx
@@ -144,6 +114,19 @@ Tutti i parametri (`KUROSYNC_DATA_DIR`, `KUROSYNC_DATA_MODE`, `KUROSYNC_READ_ONL
 
 ---
 
+## 🔐 Cambio & Reset Master Password
+
+- **Da Console Web (autenticato)**: clicca **SICUREZZA** nella topbar per cambiare la Master Password o rigenerare la **Recovery Key** (disconnette solo le altre sessioni Web; smartphone e TV restano collegati).
+- **Con Recovery Key (dal Login)**: clicca **PASSWORD DIMENTICATA?** e inserisci la Recovery Key generata durante il Setup Wizard.
+- **Senza Recovery Key (Emergenza)**:
+  - **Docker**: `docker exec kurotv-s kurosync-reset --reset-password "NuovaPassword"` oppure `--reopen-setup` (o imposta `KUROSYNC_RESET_PASSWORD` in Compose/env).
+  - **Cloudflare Workers / D1**: riapri il Setup Wizard preservando profili, dati e dispositivi con:
+    ```bash
+    npx wrangler d1 execute kurosync-db --remote --command "UPDATE instance_config SET setup_completed = 0 WHERE id = 1"
+    ```
+
+---
+
 ## 📦 Sviluppo & Rilascio
 
 ```bash
@@ -162,5 +145,5 @@ npm test               # Test suite Vitest (workerd, Node server, client-sdk)
 
 - [**Guida Integrazione Client**](./docs/CLIENT_INTEGRATION.md) — Mapping MMKV, debounce player, pairing TV, QR Connect e sync `malAuth`
 - [**Architettura & Regole**](./AGENTS.md) — Vincoli D1/SQLite, regole `malAuth` e pipeline operativa
-- [**Migrazioni Database**](./migrations) — Schema SQL incrementale (`0001` → `0003`)
+- [**Migrazioni Database**](./migrations) — Schema SQL incrementale (`0001` → `0004`)
 - [**Client SDK**](./packages/sync-client) — Package `@kurosync/sync-client`

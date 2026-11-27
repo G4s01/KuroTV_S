@@ -4,8 +4,10 @@ import { Badge } from './Badge';
 import { Button } from './Button';
 import {
   TvIcon,
+  MobileIcon,
   LogOutIcon,
   DownloadIcon,
+  KeyIcon,
   UserIcon,
   PlusIcon,
   CheckIcon,
@@ -19,8 +21,10 @@ interface NavbarProps {
   activeProfileId: string | null;
   onSelectProfile: (profileId: string) => void;
   onOpenCreateProfile?: () => void;
+  onOpenMobilePair: () => void;
   onOpenTvPair: () => void;
   onOpenBackup: () => void;
+  onOpenSecurity: () => void;
   onLogout: () => void;
   currentRoute: string;
   onNavigate: (route: string) => void;
@@ -31,8 +35,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeProfileId,
   onSelectProfile,
   onOpenCreateProfile,
+  onOpenMobilePair,
   onOpenTvPair,
   onOpenBackup,
+  onOpenSecurity,
   onLogout,
   currentRoute,
   onNavigate,
@@ -150,7 +156,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Profile & Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           {/* Profile Switcher & Add Profile Dropdown */}
           {profiles.length > 0 && (
             <div ref={dropdownRef} style={{ position: 'relative' }}>
@@ -387,6 +393,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           )}
 
+          {/* Quick Mobile Pair Button */}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onOpenMobilePair}
+            icon={<MobileIcon size={14} color="#3B82F6" aria-hidden="true" />}
+            title="COLLEGA SMARTPHONE"
+          >
+            ACCOPPIA MOBILE
+          </Button>
+
           {/* Quick TV Pair Button */}
           <Button
             variant="secondary"
@@ -407,6 +424,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="BACKUP & RIPRISTINO"
           >
             BACKUP
+          </Button>
+
+          {/* Security / Password Shortcut */}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onOpenSecurity}
+            icon={<KeyIcon size={14} color="#F59E0B" aria-hidden="true" />}
+            title="SICUREZZA E MASTER PASSWORD"
+          >
+            SICUREZZA
           </Button>
 
           {/* Logout */}

@@ -2,6 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  applyPasswordReset,
+  applyPasswordResetIfChanged,
+  reopenInstanceSetup,
+} from "../../src/server/cli-reset";
 import { SqliteD1Database } from "../../src/server/d1-sqlite";
 import { runMigrations } from "../../src/server/migrations";
 import { createKuroNodeServer, type KuroNodeServerInstance } from "../../src/server/server";
@@ -55,6 +60,7 @@ describe("Docker / Node.js Self-Hosted Runtime & SQLite Adapter", () => {
         "0001_init.sql",
         "0002_server_replication_cursor.sql",
         "0003_mal_auth.sql",
+        "0004_recovery_key.sql",
       ]);
 
       // Re-running migrations should skip all already applied
@@ -136,6 +142,7 @@ describe("Docker / Node.js Self-Hosted Runtime & SQLite Adapter", () => {
         "0001_init.sql",
         "0002_server_replication_cursor.sql",
         "0003_mal_auth.sql",
+        "0004_recovery_key.sql",
       ]);
     } finally {
       db.closeGracefully();
@@ -459,5 +466,121 @@ describe("Docker / Node.js Self-Hosted Runtime & SQLite Adapter", () => {
       body: JSON.stringify({ padding: "x".repeat(200) }),
     });
     expect(oversized.status).toBe(413);
+  });
+
+  it("supports Docker CLI password reset, reopen setup, and idempotent KUROSYNC_RESET_PASSWORD env", async () => {
+    const tmp = makeTempDir("kuro-cli-reset-");
+    cleanupDirs.push(tmp);
+    const dbPath = path.join(tmp, "kurosync.db");
+    const staticDir = createStaticFixtureDir(tmp);
+
+    // 1. Boot with KUROSYNC_RESET_PASSWORD on fresh DB -> initializes master password & profile
+    const srv1 = await createKuroNodeServer({
+      port: 0,
+      host: "127.0.0.1",
+      dataDir: tmp,
+      dbPath,
+      migrationsDir: MIGRATIONS_DIR,
+      staticDir,
+      resetPassword: "EnvResetPassword1!",
+      maintenanceIntervalMs: 0,
+    });
+    activeServers.push(srv1);
+    const url1 = `http://127.0.0.1:${srv1.port}`;
+
+    const loginRes = await fetch(`${url1}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "EnvResetPassword1!" }),
+    });
+    expect(loginRes.status).toBe(200);
+    const loginJson: any = await loginRes.json();
+    const webToken = loginJson.token as string;
+    const profileId = loginJson.profileId as string;
+
+    // Pair a mobile device
+    const mobileLogin = await fetch(`${url1}/api/auth/device-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        password: "EnvResetPassword1!",
+        profileId,
+        deviceName: "Phone",
+        deviceType: "mobile",
+      }),
+    });
+    const mobileToken = ((await mobileLogin.json()) as any).deviceToken as string;
+
+    await srv1.close();
+    activeServers.pop();
+
+    // 2. Restart with SAME KUROSYNC_RESET_PASSWORD -> idempotent (existing webToken is NOT revoked)
+    const srv2 = await createKuroNodeServer({
+      port: 0,
+      host: "127.0.0.1",
+      dataDir: tmp,
+      dbPath,
+      migrationsDir: MIGRATIONS_DIR,
+      staticDir,
+      resetPassword: "EnvResetPassword1!",
+      maintenanceIntervalMs: 0,
+    });
+    activeServers.push(srv2);
+    const url2 = `http://127.0.0.1:${srv2.port}`;
+
+    const stillActiveWeb = await fetch(`${url2}/api/profiles`, {
+      headers: { Authorization: `Bearer ${webToken}` },
+    });
+    expect(stillActiveWeb.status).toBe(200);
+    await srv2.close();
+    activeServers.pop();
+
+    // 3. CLI applyPasswordReset and reopenInstanceSetup directly on SQLite
+    const db = new SqliteD1Database(dbPath);
+    try {
+      const cliReset = await applyPasswordReset(db, "CliResetPassword2!");
+      expect(cliReset.recoveryKey).toMatch(/^KURO-/);
+      expect(cliReset.revokedWebSessions).toBe(1);
+
+      // Mobile token remains valid while old web token was revoked
+      const webRow = await db
+        .prepare("SELECT revoked_at FROM devices WHERE device_type = 'web'")
+        .first<{ revoked_at: number | null }>();
+      expect(webRow?.revoked_at).not.toBeNull();
+
+      const mobileRow = await db
+        .prepare("SELECT revoked_at FROM devices WHERE device_type = 'mobile'")
+        .first<{ revoked_at: number | null }>();
+      expect(mobileRow?.revoked_at).toBeNull();
+
+      // Test idempotent applyPasswordResetIfChanged
+      const noOp = await applyPasswordResetIfChanged(db, "CliResetPassword2!");
+      expect(noOp.applied).toBe(false);
+
+      // Reopen setup
+      await reopenInstanceSetup(db);
+      const cfg = await db
+        .prepare("SELECT setup_completed FROM instance_config WHERE id = 1")
+        .first<{ setup_completed: number }>();
+      expect(cfg?.setup_completed).toBe(0);
+    } finally {
+      db.closeGracefully();
+    }
+
+    // Confirm mobile token works after reopening & resetting via HTTP
+    const srv3 = await createKuroNodeServer({
+      port: 0,
+      host: "127.0.0.1",
+      dataDir: tmp,
+      dbPath,
+      migrationsDir: MIGRATIONS_DIR,
+      staticDir,
+      maintenanceIntervalMs: 0,
+    });
+    activeServers.push(srv3);
+    const mobilePull = await fetch(`http://127.0.0.1:${srv3.port}/api/sync/pull?since=0`, {
+      headers: { Authorization: `Bearer ${mobileToken}` },
+    });
+    expect(mobilePull.status).toBe(200);
   });
 });

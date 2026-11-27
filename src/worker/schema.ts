@@ -7,6 +7,8 @@ export interface InstanceConfig {
   id: number;
   master_hash: string;
   master_salt: string;
+  recovery_hash: string | null;
+  recovery_salt: string | null;
   setup_completed: number; // 0 | 1
   created_at: number; // epoch ms
   updated_at: number; // epoch ms
@@ -166,6 +168,8 @@ CREATE TABLE IF NOT EXISTS instance_config (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   master_hash TEXT NOT NULL,
   master_salt TEXT NOT NULL,
+  recovery_hash TEXT,
+  recovery_salt TEXT,
   setup_completed INTEGER NOT NULL DEFAULT 0 CHECK (setup_completed IN (0, 1)),
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
