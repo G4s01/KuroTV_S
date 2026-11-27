@@ -94,6 +94,36 @@ export const DEFAULT_ANISKIP_SETTINGS: AniSkipSettings = {
   buttonDuration: 10,
 };
 
+export type PlayerTapDelayMs = 0 | 100 | 150 | 200 | 250;
+
+export const PLAYER_TAP_DELAY_VALUES: readonly PlayerTapDelayMs[] = [
+  0, 100, 150, 200, 250,
+];
+
+export const DEFAULT_PLAYER_TAP_DELAY_MS: PlayerTapDelayMs = 200;
+
+/**
+ * Normalizes untrusted playerTapDelayMs values to one of the supported presets
+ * (0 | 100 | 150 | 200 | 250), defaulting to 200ms on non-finite or invalid input.
+ */
+export function normalizePlayerTapDelayMs(value: unknown): PlayerTapDelayMs {
+  const numeric =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && /^(0|100|150|200|250)$/.test(value.trim())
+      ? Number(value.trim())
+      : NaN;
+
+  if (
+    Number.isFinite(numeric) &&
+    (PLAYER_TAP_DELAY_VALUES as readonly number[]).includes(numeric)
+  ) {
+    return numeric === 0 ? 0 : (numeric as PlayerTapDelayMs);
+  }
+
+  return DEFAULT_PLAYER_TAP_DELAY_MS;
+}
+
 export interface SharedSettings {
   aniSkipSettings?: AniSkipSettings;
   endingThresholdSeconds?: number;
@@ -104,6 +134,7 @@ export interface SharedSettings {
   customDomain?: string;
   historyRetentionDays?: number;
   searchHistoryRetentionDays?: number;
+  playerTapDelayMs?: PlayerTapDelayMs | number;
   search_history?: SearchHistoryItem[];
   [key: string]: any;
 }

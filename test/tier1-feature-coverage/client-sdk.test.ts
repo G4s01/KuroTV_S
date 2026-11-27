@@ -22,6 +22,11 @@ import {
   KuroSyncClient,
   mergeLocalAndRemote,
   DEFAULT_ANISKIP_SETTINGS,
+  PLAYER_TAP_DELAY_VALUES,
+  DEFAULT_PLAYER_TAP_DELAY_MS,
+  normalizePlayerTapDelayMs,
+  type PlayerTapDelayMs,
+  type SharedSettings,
   type LocalStorageState,
   type RemotePullResponse,
   type ContinueWatchingItem,
@@ -756,6 +761,82 @@ describe("Tier 1: Client SDK & mergeLocalAndRemote (Feature 17, 24-26)", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("17.14 exports PLAYER_TAP_DELAY_VALUES, DEFAULT_PLAYER_TAP_DELAY_MS, and normalizePlayerTapDelayMs", () => {
+    expect(PLAYER_TAP_DELAY_VALUES).toEqual([0, 100, 150, 200, 250]);
+    expect(DEFAULT_PLAYER_TAP_DELAY_MS).toBe(200);
+
+    const validValues: PlayerTapDelayMs[] = [0, 100, 150, 200, 250];
+    for (const val of validValues) {
+      expect(normalizePlayerTapDelayMs(val)).toBe(val);
+    }
+
+    expect(normalizePlayerTapDelayMs(-0)).toBe(0);
+    expect(normalizePlayerTapDelayMs("0")).toBe(0);
+    expect(normalizePlayerTapDelayMs("150")).toBe(150);
+    expect(normalizePlayerTapDelayMs(null)).toBe(200);
+    expect(normalizePlayerTapDelayMs(undefined)).toBe(200);
+    expect(normalizePlayerTapDelayMs(NaN)).toBe(200);
+    expect(normalizePlayerTapDelayMs(Infinity)).toBe(200);
+    expect(normalizePlayerTapDelayMs(-Infinity)).toBe(200);
+    expect(normalizePlayerTapDelayMs(-10)).toBe(200);
+    expect(normalizePlayerTapDelayMs(999)).toBe(200);
+    expect(normalizePlayerTapDelayMs("")).toBe(200);
+    expect(normalizePlayerTapDelayMs("invalid")).toBe(200);
+  });
+
+  it("17.15 mergeLocalAndRemote() preserves playerTapDelayMs = 200 and falsy 0 without fallback", () => {
+    const settingsZero: SharedSettings = { playerTapDelayMs: 0 };
+    const settingsDefault: SharedSettings = { playerTapDelayMs: 200 };
+
+    // Hydrate 200 from remote
+    const hydratedDefault = mergeLocalAndRemote(emptyState(), {
+      serverTime: 1000,
+      deltas: {
+        ...emptyDeltas(),
+        sharedSettings: settingsDefault,
+      },
+      tombstones: [],
+    });
+    expect(hydratedDefault.state.sharedSettings.playerTapDelayMs).toBe(200);
+
+    // Remote 0 overrides local 200 (falsy 0 must NOT fallback to 200 or undefined)
+    const remoteZeroOverrides = mergeLocalAndRemote(
+      {
+        ...emptyState(),
+        sharedSettings: { ...settingsDefault, preferredQuality: "1080p" },
+      },
+      {
+        serverTime: 2000,
+        deltas: {
+          ...emptyDeltas(),
+          sharedSettings: settingsZero,
+        },
+        tombstones: [],
+      }
+    );
+    expect(remoteZeroOverrides.state.sharedSettings.playerTapDelayMs).toBe(0);
+    expect(typeof remoteZeroOverrides.state.sharedSettings.playerTapDelayMs).toBe("number");
+    expect(remoteZeroOverrides.state.sharedSettings.preferredQuality).toBe("1080p");
+
+    // Local 0 retained when remote delta omits playerTapDelayMs
+    const localZeroRetained = mergeLocalAndRemote(
+      {
+        ...emptyState(),
+        sharedSettings: { playerTapDelayMs: 0 },
+      },
+      {
+        serverTime: 3000,
+        deltas: {
+          ...emptyDeltas(),
+          sharedSettings: { autoplayNext: true },
+        },
+        tombstones: [],
+      }
+    );
+    expect(localZeroRetained.state.sharedSettings.playerTapDelayMs).toBe(0);
+    expect(localZeroRetained.state.sharedSettings.autoplayNext).toBe(true);
   });
 });
 

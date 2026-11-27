@@ -1,13 +1,14 @@
-import type {
-  AnimeItem,
-  ContinueWatchingItem,
-  WatchHistoryItem,
-  WatchProgressItem,
-  SearchHistoryItem,
-  MalAuthSyncRecord,
-  LocalStorageState,
-  RemotePullResponse,
-  MergeResult,
+import {
+  normalizePlayerTapDelayMs,
+  type AnimeItem,
+  type ContinueWatchingItem,
+  type WatchHistoryItem,
+  type WatchProgressItem,
+  type SearchHistoryItem,
+  type MalAuthSyncRecord,
+  type LocalStorageState,
+  type RemotePullResponse,
+  type MergeResult,
 } from "./types";
 
 /**
@@ -215,10 +216,29 @@ export function mergeLocalAndRemote(
   // --------------------------------------------------------------------------
   // 5. Shared Settings
   // --------------------------------------------------------------------------
-  const sharedSettings = {
-    ...local.sharedSettings,
-    ...remote.deltas?.sharedSettings,
-  };
+  const sharedSettings: Record<string, any> = {};
+  if (local.sharedSettings && typeof local.sharedSettings === "object") {
+    for (const [key, value] of Object.entries(local.sharedSettings)) {
+      if (value !== undefined) {
+        sharedSettings[key] = value;
+      }
+    }
+  }
+  if (remote.deltas?.sharedSettings && typeof remote.deltas.sharedSettings === "object") {
+    for (const [key, value] of Object.entries(remote.deltas.sharedSettings)) {
+      if (value !== undefined) {
+        sharedSettings[key] = value;
+      }
+    }
+  }
+  if ("playerTapDelayMs" in sharedSettings && sharedSettings.playerTapDelayMs !== undefined) {
+    const rawDelay = sharedSettings.playerTapDelayMs;
+    if (typeof rawDelay === "number" && Number.isFinite(rawDelay)) {
+      sharedSettings.playerTapDelayMs = rawDelay === 0 ? 0 : rawDelay;
+    } else {
+      sharedSettings.playerTapDelayMs = normalizePlayerTapDelayMs(rawDelay);
+    }
+  }
 
   // --------------------------------------------------------------------------
   // 6. Search History: tombstone dominance & timestamp ordering

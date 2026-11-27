@@ -479,6 +479,59 @@ describe("Tier 2: Client SDK & mergeLocalAndRemote Boundary Cases", () => {
       expect(result.state.sharedSettings.customSettingA).toBe("preserved_local_value");
       expect(result.state.sharedSettings.remoteSettingB).toBe("new_remote_value");
     });
+
+    it("5.2 preserves falsy playerTapDelayMs = 0 when remote overrides local 200", () => {
+      const localState = makeLocalState({
+        sharedSettings: {
+          playerTapDelayMs: 200,
+          preferredQuality: "1080p",
+        },
+      });
+
+      const remoteResponse = makeRemoteResponse({
+        sharedSettings: {
+          playerTapDelayMs: 0,
+        },
+      });
+
+      const result = mergeLocalAndRemote(localState, remoteResponse);
+      expect(result.state.sharedSettings.playerTapDelayMs).toBe(0);
+      expect(typeof result.state.sharedSettings.playerTapDelayMs).toBe("number");
+      expect(result.state.sharedSettings.preferredQuality).toBe("1080p");
+    });
+
+    it("5.3 retains local playerTapDelayMs = 0 when remote omits key or passes undefined", () => {
+      const localState = makeLocalState({
+        sharedSettings: {
+          playerTapDelayMs: 0,
+        },
+      });
+
+      const remoteResponse = makeRemoteResponse({
+        sharedSettings: {
+          playerTapDelayMs: undefined,
+          autoplayNext: false,
+        },
+      });
+
+      const result = mergeLocalAndRemote(localState, remoteResponse);
+      expect(result.state.sharedSettings.playerTapDelayMs).toBe(0);
+      expect(result.state.sharedSettings.autoplayNext).toBe(false);
+    });
+
+    it("5.4 keeps playerTapDelayMs absent on legacy payloads and sanitizes non-finite remote values", () => {
+      const legacyResult = mergeLocalAndRemote(
+        makeLocalState({ sharedSettings: { preferredQuality: "720p" } }),
+        makeRemoteResponse({ sharedSettings: { autoplayNext: true } })
+      );
+      expect("playerTapDelayMs" in legacyResult.state.sharedSettings).toBe(false);
+
+      const sanitizedResult = mergeLocalAndRemote(
+        makeLocalState({ sharedSettings: { playerTapDelayMs: 0 } }),
+        makeRemoteResponse({ sharedSettings: { playerTapDelayMs: NaN } })
+      );
+      expect(sanitizedResult.state.sharedSettings.playerTapDelayMs).toBe(200);
+    });
   });
 
   // ==========================================================================

@@ -47,18 +47,27 @@ KuroTV clients store user state locally using `react-native-mmkv` for sub-millis
 
 KuroTV stores data collections under dedicated keys defined in `StorageKeys` (`app-storage.ts`). The table below outlines how each local MMKV key translates to the remote delta entities:
 
-| MMKV Storage Key | Local Type | Remote Delta Entity | Primary Key / Lookup |
-|---|---|---|---|
-| `StorageKeys.FAVORITES` (`user.favorites`) | `AnimeItem[]` | `deltas.favorites` | `animeId` (`id`) |
-| `StorageKeys.CONTINUE_WATCHING` (`user.continueWatching`) | `ContinueWatchingItem[]` | `deltas.continueWatching` | `animeId` |
-| `StorageKeys.WATCH_HISTORY` (`user.history`) | `WatchHistoryItem[]` | `deltas.watchHistory` | `animeId` + `episodeNumber` |
-| `StorageKeys.WATCH_PROGRESS_PREFIX` (`user.progress.<animeId>.<epNum>`) | `WatchProgressItem` | `deltas.watchProgress` | `animeId` + `episodeNumber` |
-| `StorageKeys.SEARCH_HISTORY` (`user.searchHistory`) | `SearchHistoryItem[]` | `deltas.searchHistory` | `query` |
-| `StorageKeys.APP_SETTINGS` / `ANISKIP_SETTINGS` | `AppSettings` / `AniSkipSettings` | `deltas.sharedSettings` | `key` (`aniSkipSettings`, `autoplayNext`, etc.) |
-| Profile-scoped MAL auth credentials | `MalAuthSyncRecord \| null` | `deltas.malAuth` | `profile_id` (auth state only; never lists, episode cache, MAL settings, or highwater) |
+| MMKV Storage Key                                                        | Local Type                        | Remote Delta Entity       | Primary Key / Lookup                                                                   |
+| ----------------------------------------------------------------------- | --------------------------------- | ------------------------- | -------------------------------------------------------------------------------------- |
+| `StorageKeys.FAVORITES` (`user.favorites`)                              | `AnimeItem[]`                     | `deltas.favorites`        | `animeId` (`id`)                                                                       |
+| `StorageKeys.CONTINUE_WATCHING` (`user.continueWatching`)               | `ContinueWatchingItem[]`          | `deltas.continueWatching` | `animeId`                                                                              |
+| `StorageKeys.WATCH_HISTORY` (`user.history`)                            | `WatchHistoryItem[]`              | `deltas.watchHistory`     | `animeId` + `episodeNumber`                                                            |
+| `StorageKeys.WATCH_PROGRESS_PREFIX` (`user.progress.<animeId>.<epNum>`) | `WatchProgressItem`               | `deltas.watchProgress`    | `animeId` + `episodeNumber`                                                            |
+| `StorageKeys.SEARCH_HISTORY` (`user.searchHistory`)                     | `SearchHistoryItem[]`             | `deltas.searchHistory`    | `query`                                                                                |
+| `StorageKeys.APP_SETTINGS` / `ANISKIP_SETTINGS`                         | `AppSettings` / `AniSkipSettings` | `deltas.sharedSettings`   | `key` (`aniSkipSettings`, `autoplayNext`, `playerTapDelayMs`, etc.)                    |
+| Profile-scoped MAL auth credentials                                     | `MalAuthSyncRecord \| null`       | `deltas.malAuth`          | `profile_id` (auth state only; never lists, episode cache, MAL settings, or highwater) |
+
+### Shared Settings Keys (`deltas.sharedSettings`)
+
+Each key inside `sharedSettings` is stored per-profile in `shared_settings (profile_id, key, value_json, updated_at, server_updated_at)` as serialized JSON (`JSON.stringify(value)` on push, `JSON.parse(value_json)` on pull):
+
+- **Synced keys**: `aniSkipSettings` (`AniSkipSettings`), `endingThresholdSeconds`, `preferredQuality`, `autoplayNext`, `defaultServer`, `tld`, `customDomain`, `historyRetentionDays`, `searchHistoryRetentionDays`, and `playerTapDelayMs` (`0 | 100 | 150 | 200 | 250`, default `200`, representing the OSD opening delay in milliseconds on lateral player double-tap skip zones in `KuroTV_M`; `0` means `OFF` / immediate OSD and must always be preserved cleanly despite being falsy in JS).
+- **Device-local only (never synced)**: `player.brightness` and `navBarMode` stay strictly local in client MMKV because hardware display brightness and system navbar preferences vary per physical device.
 
 ### Tombstone Mapping
+
 When an entity is deleted locally:
+
 - Favorites: append tombstone `{ type: 'favorite', key: animeId, deletedAt: Date.now() }`.
 - Continue Watching: append tombstone `{ type: 'continue_watching', key: animeId, deletedAt: Date.now() }`.
 - Watch History: append tombstone `{ type: 'watch_history', key: `${animeId}:${episodeNumber}`, deletedAt: Date.now() }`.
@@ -73,29 +82,40 @@ When an entity is deleted locally:
 To protect Cloudflare Free Tier quotas (100,000 writes/day) while guaranteeing accurate watch positions across devices, the player progress sync MUST adhere to the following debouncing rules:
 
 ### Standard Debounce Interval
+
 - During continuous video playback, dispatch progress updates to the sync queue every **45 to 60 seconds**.
 - Do NOT push on every video playback tick (e.g. 250ms or 1s intervals).
 
 ### Immediate Flush Triggers
+
 Sync must immediately flush pending playback progress without debounce delay when any of the following lifecycle events occur:
+
 1. **Video Pause**: The user pauses playback.
 2. **Completion Threshold Reached**: The progress reaches or exceeds **90%** (or the user-defined `endingThresholdSeconds`).
 3. **Player Screen Exit**: The player component unmounts or navigation pops back to the anime details or home screen.
 4. **App Blur / Background Transition**: `AppState` transitions from `'active'` to `'inactive'` or `'background'`.
 
 ### Implementation Pattern
+
 ```typescript
 import { useEffect, useRef } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { syncManager } from "./sync-manager";
 
-export function usePlaybackSync(animeId: string, episodeNumber: number, duration: number) {
+export function usePlaybackSync(
+  animeId: string,
+  episodeNumber: number,
+  duration: number,
+) {
   const lastPushedPos = useRef<number>(0);
   const currentPos = useRef<number>(0);
   const debounceTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const flush = async (isCompleted = false) => {
-    if (Math.abs(currentPos.current - lastPushedPos.current) > 2 || isCompleted) {
+    if (
+      Math.abs(currentPos.current - lastPushedPos.current) > 2 ||
+      isCompleted
+    ) {
       lastPushedPos.current = currentPos.current;
       await syncManager.recordProgress({
         animeId,
@@ -115,11 +135,14 @@ export function usePlaybackSync(animeId: string, episodeNumber: number, duration
       flush(false);
     }, 45000);
 
-    const subscription = AppState.addEventListener("change", (nextState: AppStateStatus) => {
-      if (nextState !== "active") {
-        flush(false);
-      }
-    });
+    const subscription = AppState.addEventListener(
+      "change",
+      (nextState: AppStateStatus) => {
+        if (nextState !== "active") {
+          flush(false);
+        }
+      },
+    );
 
     return () => {
       if (debounceTimer.current) clearInterval(debounceTimer.current);
@@ -172,6 +195,7 @@ Clients synchronize bidirectionally based on mobile and Android TV application s
 ```
 
 ### Foreground Transition (`active`)
+
 1. Read `lastSyncTimestamp` from MMKV (`sync.last_timestamp`).
 2. Invoke `client.pullDelta(lastSyncTimestamp)`.
 3. Feed current MMKV state and remote pull deltas into `mergeLocalAndRemote()`.
@@ -180,6 +204,7 @@ Clients synchronize bidirectionally based on mobile and Android TV application s
 6. Record `newLastSyncTimestamp = remotePull.serverTime`.
 
 ### Background / Exit Transition (`background` / `inactive`)
+
 1. Gather all queued/unpushed mutations recorded during the session.
 2. If pending mutations exist, dispatch `client.pushDelta(pendingMutations)`.
 3. Clear mutation queue upon successful HTTP 200 response.
@@ -222,6 +247,7 @@ Android TV                              KuroTV_S Worker                    Mobil
 ```
 
 ### TV Device Implementation Steps
+
 1. **Start Pairing**: Call `client.startTvPairing({ deviceName: "Living Room TV", deviceType: "tv", platform: "android-tv" })`.
 2. **Display UI**: Render the 6-character uppercase `code` in monospace and draw a QR code pointing to `verifyUrl`.
 3. **Polling Loop**:
@@ -230,6 +256,7 @@ Android TV                              KuroTV_S Worker                    Mobil
    - If response `status === 'approved'`, save `deviceToken` to MMKV and route to TV home screen.
 
 ### Mobile App / Web Console Approval Steps
+
 1. The user scans the QR code or navigates to `/pair?code=K7X9P2`.
 2. The user selects the desired Profile (e.g. "Principale" or "Salotto TV").
 3. Mobile app calls `client.approveTvPairing({ code: "K7X9P2", profileId: "prof-1", deviceLabel: "Living Room TV" })`.
@@ -267,6 +294,7 @@ Web Console                               KuroTV_S Worker                    Mob
 ```
 
 ### Protocol Guarantees:
+
 - **Strictly Single-Use**: When `POST /api/auth/exchange` is called, the backend executes an atomic SQLite transaction:
   ```sql
   UPDATE pairing_codes SET status = 'consumed' WHERE code = ? AND status = 'approved'
@@ -276,6 +304,7 @@ Web Console                               KuroTV_S Worker                    Mob
 - **Web Console Countdown & Regeneration**: The Web Console displays an active live timer for the remaining validity and offers a one-click "RIGENERA QR" action to seamlessly generate fresh tokens without reloading.
 
 ### Client Implementation Pattern:
+
 ```typescript
 // In KuroTV_M deep link or camera scan handler:
 const qrToken = urlParams.get("token");
@@ -336,13 +365,15 @@ When logging out from the KuroTV Mobile app, Android TV, or Web Console, the ses
 KuroTV_S provides native endpoints designed specifically to power a **Netflix-style Profile Selection UI** (displaying avatar colors, names, and IDs) both **prior to login** and **in-app on the fly**:
 
 ### 1. Pre-Login Profile Selector (Master Password Flow)
+
 When the user connects via Master Password rather than QR code:
+
 1. User enters the backend URL and Master Password.
 2. The client calls:
    ```typescript
    const profiles = await syncClient.listProfilesWithPassword(masterPassword);
    ```
-   *(Under the hood: `POST /api/auth/profiles` with `{ password }`)*
+   _(Under the hood: `POST /api/auth/profiles` with `{ password }`)_
 3. The app renders a grid of profiles with their respective `avatarColor` (e.g. `#E50914`, `#00E5FF`, `#10B981`) and names.
 4. When the user taps a profile:
    ```typescript
@@ -358,7 +389,9 @@ When the user connects via Master Password rather than QR code:
    ```
 
 ### 2. In-App Profile Switcher (Authenticated Session)
+
 A connected mobile or TV device can switch profiles dynamically at any moment without re-authenticating or re-pairing:
+
 ```typescript
 // 1. Fetch available profiles for current instance:
 const profiles = await syncClient.listProfiles(); // GET /api/profiles
@@ -376,7 +409,9 @@ await syncClient.pullDelta(0); // Full pull for newly active profile
 ## 9. Custom Device Naming & Web Administration
 
 ### 1. Sending Custom Device Names from Mobile App
+
 When logging in (`loginDevice`) or scanning QR (`exchangeToken`), the app can pass a friendly hardware name:
+
 ```typescript
 await syncClient.exchangeToken({
   token: qrToken,
@@ -387,7 +422,9 @@ await syncClient.exchangeToken({
 ```
 
 ### 2. Renaming Devices from Web Console (`PUT /api/devices/:id`)
+
 Administrators can rename any device directly from the OLED Web Console under **Dispositivi**:
+
 - Click **MODIFICA** on any device card.
 - Enter the custom label (e.g. "SAMSUNG S24 DI MARCO", "TV CAMERA LETTO").
 - The change is saved instantly via `PUT /api/devices/:id` (`{ name: string }`).
@@ -399,11 +436,14 @@ Administrators can rename any device directly from the OLED Web Console under **
 In KuroTV, an anime marked as **"IN PARI"** (`isCaughtUp = true`) indicates that the user has watched the most recently released episode of an ongoing simulcast series and is waiting for new episodes to air.
 
 ### 1. Dual Passive & Remote Detection in KuroTV_M
+
 - **Home List Check (`syncCaughtUpWithHomeList`)**: Zero-network passive check comparing home carousel banners with caught-up titles. If a new episode number is detected in recent releases, the anime is promoted to the front of the Continue Watching list at position 0.
 - **Background Remote Scraper (`syncCaughtUpWithRemote`)**: Periodically (every 4 hours), the client checks the scraper backend for new episode releases or series completion.
 
 ### 2. Multi-Device Conflict Prevention
+
 When synchronizing Continue Watching across devices, `mergeLocalAndRemote()` prevents state corruption through these invariants:
+
 - **Episode Regression Prevention**: If Device A watched Episode 13 locally, while a sync delta arrives from Device B containing Episode 12 with `isCaughtUp = true`:
   - The SDK preserves Episode 13 metadata (`episodeNumber: 13`, `episodeId`, `dataId`, `position`, `percentage`).
   - The SDK does **NOT** adopt `isCaughtUp = true` from the older Episode 12.
@@ -417,14 +457,16 @@ When synchronizing Continue Watching across devices, `mergeLocalAndRemote()` pre
 KuroTV_S supports profile-isolated synchronization of **MyAnimeList OAuth credentials only** via the `mal_auth` table and `deltas.malAuth` (`MalAuthSyncRecord`).
 
 ### Strict Domain Boundaries
+
 - **Synced fields only**: `clientId`, `accessToken`, `refreshToken`, `expiresAt`, `tokenType`, `username`, `userId`, `picture`, `updatedAt`, plus `'mal_auth'` tombstones.
 - **Never synced**: MAL anime/manga lists, episode caches, MAL plugin preferences/settings, or local MAL highwater timestamps.
 - **Zero Worker secrets**: No MAL application secret or hardcoded `clientId` lives in the Worker; the client supplies `clientId` in `MalAuthSyncRecord`.
 - **Per-profile isolation**: Each `mal_auth` row is keyed by `profile_id` (`ON DELETE CASCADE` to `profiles(id)` and cleaned up on `DELETE /api/profiles/:id`).
 
 ### Capability Detection & Delta Semantics
+
 - `GET /api/sync/pull` **always** includes the `malAuth` property inside `deltas` (`MalAuthSyncRecord | null`), allowing `KuroTV_M` to detect server support cleanly via `'malAuth' in remotePull.deltas`.
-- `deltas.malAuth === null` means *"no `malAuth` record exists or it was not modified since `since`"* — `mergeLocalAndRemote()` preserves existing `local.malAuth` unless a `'mal_auth'` tombstone dominates it.
+- `deltas.malAuth === null` means _"no `malAuth` record exists or it was not modified since `since`"_ — `mergeLocalAndRemote()` preserves existing `local.malAuth` unless a `'mal_auth'` tombstone dominates it.
 - Deletions (MAL disconnect/logout) are signaled via `deletions: [{ type: 'mal_auth', key: 'default', deletedAt }]` and propagated through `tombstones`.
 - **Conflict Resolution**:
   - `POST /api/sync/push` validates that `clientId`, `accessToken`, and `refreshToken` are non-empty strings.
@@ -432,6 +474,7 @@ KuroTV_S supports profile-isolated synchronization of **MyAnimeList OAuth creden
   - A `'mal_auth'` tombstone blocks stale pushes where `updatedAt <= tombstone.deleted_at`; a newer re-login (`updatedAt > tombstone.deleted_at`) invalidates the tombstone and restores `mal_auth`.
 
 ### Web Console MAL Management & Direct OAuth PKCE (`/api/mal/*`)
+
 - Administrators can also inspect, link, refresh, and disconnect per-profile MAL associations directly from the Web Console **MYANIMELIST** tab (`MalView.tsx`):
   - `GET /api/mal/accounts`: returns sanitized connection metadata across all profiles for `web` sessions without exposing raw `accessToken`/`refreshToken` (`mobile`/`tv` tokens are restricted to their own `profile_id`).
   - `POST /api/mal/oauth/exchange`: performs server-side PKCE `plain` token exchange against MyAnimeList (avoiding browser CORS limits) using the Web Console's dynamic `<window.location.origin>/mal-callback` redirect URI, clears any prior `'mal_auth'` tombstone, and persists the resulting `MalAuthSyncRecord` so paired `KuroTV_M` clients receive it on the next sync pull.
@@ -443,7 +486,11 @@ KuroTV_S supports profile-isolated synchronization of **MyAnimeList OAuth creden
 ## 12. Zero-Dependency Client Initialization Example
 
 ```typescript
-import { KuroSyncClient, mergeLocalAndRemote, type LocalStorageState } from "@kurosync/sync-client";
+import {
+  KuroSyncClient,
+  mergeLocalAndRemote,
+  type LocalStorageState,
+} from "@kurosync/sync-client";
 import { MMKV } from "react-native-mmkv";
 
 const mmkv = new MMKV({ id: "kurotv-storage" });
@@ -462,7 +509,9 @@ export async function performFullSync(): Promise<void> {
 
   const localState: LocalStorageState = {
     favorites: JSON.parse(mmkv.getString("user.favorites") || "[]"),
-    continueWatching: JSON.parse(mmkv.getString("user.continueWatching") || "[]"),
+    continueWatching: JSON.parse(
+      mmkv.getString("user.continueWatching") || "[]",
+    ),
     watchHistory: JSON.parse(mmkv.getString("user.history") || "[]"),
     watchProgress: [], // Gathered from user.progress.*
     sharedSettings: JSON.parse(mmkv.getString("settings.appSettings") || "{}"),
@@ -473,7 +522,10 @@ export async function performFullSync(): Promise<void> {
   const { state: mergedState } = mergeLocalAndRemote(localState, remotePull);
 
   mmkv.set("user.favorites", JSON.stringify(mergedState.favorites));
-  mmkv.set("user.continueWatching", JSON.stringify(mergedState.continueWatching));
+  mmkv.set(
+    "user.continueWatching",
+    JSON.stringify(mergedState.continueWatching),
+  );
   mmkv.set("user.history", JSON.stringify(mergedState.watchHistory));
   mmkv.set("user.searchHistory", JSON.stringify(mergedState.searchHistory));
   if ("malAuth" in remotePull.deltas) {

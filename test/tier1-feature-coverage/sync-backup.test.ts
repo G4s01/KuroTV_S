@@ -611,4 +611,79 @@ describe("Tier 1: Backup Export & Import (Feature 16)", () => {
     expect(secondImport.status).toBe(200);
     expect(secondImport.body.ok).toBe(true);
   });
+
+  it("16.6 Backup export/import round-trip preserves shared_settings playerTapDelayMs = 0 and 150", async () => {
+    for (const expectedDelay of [0, 150] as const) {
+      await clearDatabase(env.DB);
+      await ensureSchema(env.DB);
+      await seedAuthContext(env.DB);
+
+      await harness.post("/api/sync/push", {
+        sharedSettings: {
+          playerTapDelayMs: expectedDelay,
+          preferredQuality: "1080p",
+        },
+      });
+
+      const exportRes = await harness.get<any>("/api/sync/export");
+      expect(exportRes.status).toBe(200);
+
+      const exportedSetting = exportRes.body.sharedSettings.find(
+        (s: any) => s.key === "playerTapDelayMs"
+      );
+      expect(exportedSetting).toBeDefined();
+      expect(exportedSetting.value_json).toBe(String(expectedDelay));
+
+      // Wipe and re-seed auth before restoring backup
+      await clearDatabase(env.DB);
+      await ensureSchema(env.DB);
+      await seedAuthContext(env.DB);
+
+      const importRes = await harness.post<any>("/api/sync/import", exportRes.body);
+      expect(importRes.status).toBe(200);
+      expect(importRes.body.ok).toBe(true);
+
+      const restoredRow = await env.DB.prepare(
+        "SELECT value_json FROM shared_settings WHERE profile_id = ? AND key = 'playerTapDelayMs'"
+      )
+        .bind(FIXTURE_PROFILE_PRIMARY.id)
+        .first<{ value_json: string }>();
+      expect(restoredRow?.value_json).toBe(String(expectedDelay));
+
+      const pullRes = await harness.get<{
+        deltas: { sharedSettings: Record<string, any> };
+      }>("/api/sync/pull?since=0");
+      expect(pullRes.status).toBe(200);
+      expect(pullRes.body.deltas.sharedSettings.playerTapDelayMs).toBe(expectedDelay);
+      expect(typeof pullRes.body.deltas.sharedSettings.playerTapDelayMs).toBe("number");
+      expect(pullRes.body.deltas.sharedSettings.preferredQuality).toBe("1080p");
+    }
+  });
+
+  it("16.7 Legacy backup import without playerTapDelayMs restores cleanly without fabricating the key", async () => {
+    const legacyBackup = {
+      version: 1,
+      profiles: [{ id: FIXTURE_PROFILE_PRIMARY.id, name: FIXTURE_PROFILE_PRIMARY.name }],
+      sharedSettings: [
+        {
+          profile_id: FIXTURE_PROFILE_PRIMARY.id,
+          key: "preferredQuality",
+          value_json: '"720p"',
+          updated_at: 1700000000000,
+          server_updated_at: 1700000000000,
+        },
+      ],
+    };
+
+    const importRes = await harness.post<any>("/api/sync/import", legacyBackup);
+    expect(importRes.status).toBe(200);
+    expect(importRes.body.ok).toBe(true);
+
+    const pullRes = await harness.get<{
+      deltas: { sharedSettings: Record<string, any> };
+    }>("/api/sync/pull?since=0");
+    expect(pullRes.status).toBe(200);
+    expect(pullRes.body.deltas.sharedSettings.preferredQuality).toBe("720p");
+    expect("playerTapDelayMs" in pullRes.body.deltas.sharedSettings).toBe(false);
+  });
 });

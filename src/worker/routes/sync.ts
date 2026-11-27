@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAuth } from "../middleware/auth";
 import { purgeOldTombstones } from "../maintenance";
+import { normalizePlayerTapDelayMs } from "../../../packages/sync-client/src/types";
 import type {
   AnimeItem,
   ContinueWatchingItem,
@@ -10,6 +11,8 @@ import type {
   SearchHistoryItem,
   MalAuthSyncRecord,
 } from "@kurosync/sync-client";
+
+const DEVICE_LOCAL_SETTING_KEYS = new Set(["player.brightness", "navBarMode"]);
 
 export const syncRouter = new Hono<AppEnv>();
 
@@ -173,6 +176,14 @@ syncRouter.get("/sync/pull", async (c) => {
         searchHistory = JSON.parse(row.value_json);
       } catch {
         searchHistory = [];
+      }
+    } else if (DEVICE_LOCAL_SETTING_KEYS.has(row.key)) {
+      continue;
+    } else if (row.key === "playerTapDelayMs") {
+      try {
+        sharedSettings[row.key] = normalizePlayerTapDelayMs(JSON.parse(row.value_json));
+      } catch {
+        sharedSettings[row.key] = normalizePlayerTapDelayMs(row.value_json);
       }
     } else {
       try {
@@ -694,8 +705,20 @@ syncRouter.post("/sync/push", async (c) => {
   }
 
   // 6. Process Shared Settings
-  if (sharedSettings && typeof sharedSettings === "object") {
-    for (const [key, value] of Object.entries(sharedSettings)) {
+  if (sharedSettings && typeof sharedSettings === "object" && !Array.isArray(sharedSettings)) {
+    for (const [key, rawValue] of Object.entries(sharedSettings)) {
+      if (!key || rawValue === undefined) {
+        continue;
+      }
+      if (DEVICE_LOCAL_SETTING_KEYS.has(key)) {
+        continue;
+      }
+      const value =
+        key === "playerTapDelayMs" ? normalizePlayerTapDelayMs(rawValue) : rawValue;
+      const serializedValue = JSON.stringify(value);
+      if (serializedValue === undefined) {
+        continue;
+      }
       statements.push(
         c.env.DB.prepare(`
           INSERT INTO shared_settings (profile_id, key, value_json, updated_at, server_updated_at)
@@ -704,7 +727,7 @@ syncRouter.post("/sync/push", async (c) => {
             value_json = excluded.value_json,
             updated_at = excluded.updated_at,
             server_updated_at = excluded.server_updated_at
-        `).bind(profileId, key, JSON.stringify(value), now, now)
+        `).bind(profileId, key, serializedValue, now, now)
       );
       appliedCount++;
     }

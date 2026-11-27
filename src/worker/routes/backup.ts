@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAuth } from "../middleware/auth";
+import { normalizePlayerTapDelayMs } from "../../../packages/sync-client/src/types";
 
 export const backupRouter = new Hono<AppEnv>();
 
@@ -286,7 +287,51 @@ backupRouter.post("/sync/import", async (c) => {
   }
 
   // 6. Shared Settings
-  for (const ss of sharedSettings) {
+  for (const ss of Array.isArray(sharedSettings) ? sharedSettings : []) {
+    if (!ss || typeof ss !== "object") continue;
+    const profileId = ss.profile_id ?? ss.profileId;
+    const key = ss.key;
+    if (
+      typeof profileId !== "string" ||
+      profileId.length === 0 ||
+      typeof key !== "string" ||
+      key.length === 0
+    ) {
+      continue;
+    }
+    if (key === "player.brightness" || key === "navBarMode") {
+      continue;
+    }
+
+    let valueJson: string | undefined;
+    if (typeof ss.value_json === "string") {
+      valueJson = ss.value_json;
+    } else if (ss.value_json !== undefined) {
+      valueJson = JSON.stringify(ss.value_json);
+    } else if (ss.value !== undefined) {
+      valueJson = JSON.stringify(ss.value);
+    }
+    if (valueJson === undefined) {
+      continue;
+    }
+
+    if (key === "playerTapDelayMs") {
+      try {
+        valueJson = JSON.stringify(normalizePlayerTapDelayMs(JSON.parse(valueJson)));
+      } catch {
+        valueJson = JSON.stringify(normalizePlayerTapDelayMs(valueJson));
+      }
+    }
+
+    const updatedAt =
+      typeof ss.updated_at === "number" && Number.isFinite(ss.updated_at)
+        ? ss.updated_at
+        : Date.now();
+    const serverUpdatedAt =
+      typeof ss.server_updated_at === "number" && Number.isFinite(ss.server_updated_at)
+        ? ss.server_updated_at
+        : updatedAt;
+
     statements.push(
       c.env.DB.prepare(`
         INSERT INTO shared_settings (profile_id, key, value_json, updated_at, server_updated_at)
@@ -295,13 +340,7 @@ backupRouter.post("/sync/import", async (c) => {
           value_json = excluded.value_json,
           updated_at = excluded.updated_at,
           server_updated_at = excluded.server_updated_at
-      `).bind(
-        ss.profile_id,
-        ss.key,
-        ss.value_json,
-        ss.updated_at || Date.now(),
-        ss.server_updated_at || ss.updated_at || Date.now()
-      )
+      `).bind(profileId, key, valueJson, updatedAt, serverUpdatedAt)
     );
   }
 

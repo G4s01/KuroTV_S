@@ -709,4 +709,113 @@ describe("Tier 2: Delta Sync Boundary & Corner Cases", () => {
       expect(pullRes.body.deltas.continueWatching.some((cw) => cw.animeId === "anime-cw-isolated")).toBe(false);
     });
   });
+
+  // ==========================================================================
+  // 7. playerTapDelayMs Sync, Sanitization, Isolation & Delta Cursor
+  // ==========================================================================
+  describe("7. playerTapDelayMs Sync, Sanitization, Isolation & Delta Cursor", () => {
+    it("7.1 stores playerTapDelayMs: 0 as value_json = '0' and pulls number 0, plus 150, 200, 250", async () => {
+      harness.setBearerToken(token1);
+
+      for (const delay of [0, 150, 200, 250] as const) {
+        const pushRes = await harness.post<{ ok: boolean; appliedCount: number }>("/api/sync/push", {
+          sharedSettings: { playerTapDelayMs: delay },
+        });
+        expect(pushRes.status).toBe(200);
+        expect(pushRes.body.appliedCount).toBe(1);
+
+        const dbRow = await env.DB.prepare(
+          "SELECT value_json FROM shared_settings WHERE profile_id = ? AND key = 'playerTapDelayMs'"
+        )
+          .bind(profile1Id)
+          .first<{ value_json: string }>();
+        expect(dbRow?.value_json).toBe(String(delay));
+
+        const pullRes = await harness.get<{
+          deltas: { sharedSettings: Record<string, any> };
+        }>("/api/sync/pull?since=0");
+        expect(pullRes.status).toBe(200);
+        expect(pullRes.body.deltas.sharedSettings.playerTapDelayMs).toBe(delay);
+        expect(typeof pullRes.body.deltas.sharedSettings.playerTapDelayMs).toBe("number");
+      }
+    });
+
+    it("7.2 sanitizes invalid/non-finite playerTapDelayMs and ignores undefined entries without breaking legacy clients", async () => {
+      harness.setBearerToken(token1);
+
+      // Legacy client without playerTapDelayMs key
+      const legacyPush = await harness.post<{ ok: boolean; appliedCount: number }>("/api/sync/push", {
+        sharedSettings: { preferredQuality: "1080p" },
+      });
+      expect(legacyPush.status).toBe(200);
+      expect(legacyPush.body.appliedCount).toBe(1);
+
+      const legacyPull = await harness.get<{ deltas: { sharedSettings: Record<string, any> } }>(
+        "/api/sync/pull?since=0"
+      );
+      expect(legacyPull.body.deltas.sharedSettings.preferredQuality).toBe("1080p");
+      expect("playerTapDelayMs" in legacyPull.body.deltas.sharedSettings).toBe(false);
+
+      // Non-finite (serialized to null) and invalid values sanitize to default 200
+      for (const invalidValue of [null, "invalid", -50, 999]) {
+        const res = await harness.post<{ ok: boolean }>("/api/sync/push", {
+          sharedSettings: {
+            playerTapDelayMs: invalidValue,
+            "player.brightness": 0.75,
+            navBarMode: "floating",
+          },
+        });
+        expect(res.status).toBe(200);
+
+        const pull = await harness.get<{ deltas: { sharedSettings: Record<string, any> } }>(
+          "/api/sync/pull?since=0"
+        );
+        expect(pull.body.deltas.sharedSettings.playerTapDelayMs).toBe(200);
+        expect("player.brightness" in pull.body.deltas.sharedSettings).toBe(false);
+        expect("navBarMode" in pull.body.deltas.sharedSettings).toBe(false);
+      }
+    });
+
+    it("7.3 isolates playerTapDelayMs across profiles and honors delta cursor since", async () => {
+      const beforePushCursor = Date.now() - 5000;
+
+      // Profile 1 sets 0 (OFF)
+      harness.setBearerToken(token1);
+      await harness.post("/api/sync/push", {
+        sharedSettings: { playerTapDelayMs: 0 },
+      });
+
+      // Profile 2 sets 250
+      harness.setBearerToken(token2);
+      await harness.post("/api/sync/push", {
+        sharedSettings: { playerTapDelayMs: 250 },
+      });
+
+      // Profile 1 pulls with since before push -> receives 0
+      harness.setBearerToken(token1);
+      const prof1Delta = await harness.get<{
+        serverTime: number;
+        deltas: { sharedSettings: Record<string, any> };
+      }>(`/api/sync/pull?since=${beforePushCursor}`);
+      expect(prof1Delta.status).toBe(200);
+      expect(prof1Delta.body.deltas.sharedSettings.playerTapDelayMs).toBe(0);
+
+      // Profile 2 pulls with since before push -> receives 250 (no cross-profile leakage)
+      harness.setBearerToken(token2);
+      const prof2Delta = await harness.get<{
+        serverTime: number;
+        deltas: { sharedSettings: Record<string, any> };
+      }>(`/api/sync/pull?since=${beforePushCursor}`);
+      expect(prof2Delta.status).toBe(200);
+      expect(prof2Delta.body.deltas.sharedSettings.playerTapDelayMs).toBe(250);
+
+      // Future cursor omits unchanged playerTapDelayMs
+      harness.setBearerToken(token1);
+      const prof1NoChanges = await harness.get<{
+        deltas: { sharedSettings: Record<string, any> };
+      }>(`/api/sync/pull?since=${prof1Delta.body.serverTime + 1000}`);
+      expect(prof1NoChanges.status).toBe(200);
+      expect("playerTapDelayMs" in prof1NoChanges.body.deltas.sharedSettings).toBe(false);
+    });
+  });
 });
