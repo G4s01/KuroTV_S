@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.69.0",
-    "@cloudflare/vitest-pool-workers": "0.23.0",
+    "@cloudflare/vitest-plugin": "^1.0.0",
     "@cloudflare/workers-types": "5.20261110.1",
     "@types/node": "^22.13.0",
     "@types/qrcode": "^1.5.6",

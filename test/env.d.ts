@@ -1,7 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
-/// <reference types="@cloudflare/vitest-pool-workers/types" />
+/// <reference types="@cloudflare/vitest-plugin/types" />
 
-import type { D1Migration } from "@cloudflare/vitest-pool-workers";
+import type { D1Migration } from "@cloudflare/vitest-plugin";
 
 declare global {
   namespace Cloudflare {

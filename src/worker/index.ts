@@ -10,6 +10,7 @@ import { pairRouter } from "./routes/pair";
 import { devicesRouter } from "./routes/devices";
 import { syncRouter } from "./routes/sync";
 import { backupRouter } from "./routes/backup";
+import { malRouter } from "./routes/mal";
 
 const app = new Hono<AppEnv>();
 
@@ -19,7 +20,7 @@ app.use(
   cors({
     origin: (origin) => origin || "*",
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "X-Pair-Secret"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Pair-Secret", "X-Profile-Id"],
     exposeHeaders: ["Content-Length"],
     maxAge: 86400,
   })
@@ -64,6 +65,7 @@ app.route("/api", pairRouter);
 app.route("/api", devicesRouter);
 app.route("/api", syncRouter);
 app.route("/api", backupRouter);
+app.route("/api", malRouter);
 
 // 5. API 404 handler (ensures API clients never receive SPA HTML fallback)
 app.all("/api/*", (c) => {

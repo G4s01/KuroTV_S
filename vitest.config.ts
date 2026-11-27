@@ -1,6 +1,6 @@
 import path from "node:path";
 import { defineConfig } from "vitest/config";
-import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
+import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 
 export default defineConfig(async () => {
   const migrationsPath = path.resolve(__dirname, "migrations");
@@ -28,6 +28,12 @@ export default defineConfig(async () => {
           ],
           test: {
             name: "workers",
+            maxWorkers: 2,
+            testTimeout: 30000,
+            hookTimeout: 30000,
+            sequence: {
+              groupOrder: 1,
+            },
             setupFiles: ["./test/helpers/setup.ts"],
             include: [
               "test/**/*.test.ts",
@@ -42,6 +48,9 @@ export default defineConfig(async () => {
           test: {
             name: "client-sdk",
             environment: "node",
+            sequence: {
+              groupOrder: 0,
+            },
             include: [
               "test/client-sdk/**/*.test.ts",
               "test/tier1-feature-coverage/client-sdk.test.ts",

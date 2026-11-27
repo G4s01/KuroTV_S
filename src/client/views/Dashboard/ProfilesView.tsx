@@ -4,8 +4,8 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
 import { ConfirmModal } from '../../components/ConfirmModal';
-import { PlusIcon, TrashIcon, UserIcon, CheckIcon, EditIcon } from '../../components/Icons';
-import { api, type ProfileRecord } from '../../api';
+import { PlusIcon, TrashIcon, UserIcon, CheckIcon, EditIcon, LinkIcon } from '../../components/Icons';
+import { api, type MalAccountSummary, type ProfileRecord } from '../../api';
 
 const AVATAR_COLORS = [
   '#E50914',
@@ -21,15 +21,19 @@ const AVATAR_COLORS = [
 interface ProfilesViewProps {
   profiles: ProfileRecord[];
   activeProfileId: string | null;
+  malAccounts?: MalAccountSummary[];
   onRefreshProfiles: () => Promise<void>;
   onSelectProfile: (id: string) => void;
+  onManageMal?: (profileId: string) => void;
 }
 
 export const ProfilesView: React.FC<ProfilesViewProps> = ({
   profiles,
   activeProfileId,
+  malAccounts = [],
   onRefreshProfiles,
   onSelectProfile,
+  onManageMal,
 }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newProfileName, setNewProfileName] = useState('');
@@ -118,7 +122,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
       isOpen: true,
       title: 'ELIMINA PROFILO',
       message: `Vuoi eliminare definitivamente il profilo "${name}"?`,
-      submessage: 'Tutti i dati associati (Continua a guardare, Preferiti, Cronologia e Impostazioni) per questo profilo verranno rimossi permanentemente.',
+      submessage: 'Tutti i dati associati (Continua a guardare, Preferiti, Cronologia, Impostazioni e associazione MAL) per questo profilo verranno rimossi permanentemente.',
       confirmLabel: 'ELIMINA PROFILO',
       action: async () => {
         setDeletingId(id);
@@ -200,6 +204,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
         {profiles.map((p) => {
           const isActive = p.id === activeProfileId;
           const color = p.avatarColor || p.avatar_color || '#E50914';
+          const malAcc = malAccounts.find((a) => a.profileId === p.id);
 
           return (
             <Card
@@ -277,6 +282,69 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
                   </div>
                 </div>
               </div>
+
+              {onManageMal && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px',
+                    padding: '8px 10px',
+                    backgroundColor: '#121212',
+                    border: `1px solid ${oledTheme.colors.border}`,
+                    borderRadius: oledTheme.radius.sm,
+                    fontFamily: FONT_MONO,
+                    fontSize: '11px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                    <span
+                      style={{
+                        width: '7px',
+                        height: '7px',
+                        borderRadius: '50%',
+                        flexShrink: 0,
+                        backgroundColor: malAcc?.connected
+                          ? malAcc.isExpired
+                            ? '#F59E0B'
+                            : '#10B981'
+                          : oledTheme.colors.textMuted,
+                      }}
+                    />
+                    <span
+                      className="raw-token"
+                      style={{
+                        color: malAcc?.connected ? '#FFFFFF' : oledTheme.colors.textMuted,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {malAcc?.connected
+                        ? `MAL: ${malAcc.username ? `@${malAcc.username}` : 'CONNESSO'}`
+                        : 'MAL: NON ASSOCIATO'}
+                    </span>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onManageMal(p.id)}
+                    icon={<LinkIcon size={11} aria-hidden="true" />}
+                    aria-label={`${malAcc?.connected ? 'Gestisci MAL' : 'Associa MAL'} per ${p.name}`}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '10px',
+                      color: malAcc?.connected ? '#FFFFFF' : oledTheme.colors.primary,
+                      borderColor: oledTheme.colors.border,
+                    }}
+                  >
+                    {malAcc?.connected ? 'GESTISCI MAL' : 'ASSOCIA MAL'}
+                  </Button>
+                </div>
+              )}
 
               <div
                 style={{

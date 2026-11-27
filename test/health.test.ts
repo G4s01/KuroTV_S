@@ -4,6 +4,18 @@ import app from "../src/worker/index";
 import { ensureSchema, resetSchemaInitCache } from "../src/worker/schema";
 import { KuroSyncClient } from "@kurosync/sync-client";
 
+function createFailingBatchDb(db: D1Database, errorMessage: string): D1Database {
+  return new Proxy(db, {
+    get(target, prop) {
+      if (prop === "batch") {
+        return () => Promise.reject(new Error(errorMessage));
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
 describe("Milestone 1: D1 Schema & Health Route", () => {
   beforeEach(async () => {
     resetSchemaInitCache();
@@ -97,14 +109,7 @@ describe("Milestone 1: D1 Schema & Health Route", () => {
 
   it("GET /api/health returns HTTP 500 with JSON error when database fails during cold start", async () => {
     resetSchemaInitCache();
-    const brokenDb = new Proxy(env.DB, {
-      get(target, prop) {
-        if (prop === "batch") {
-          return () => Promise.reject(new Error("SQLITE_BUSY: database is locked"));
-        }
-        return Reflect.get(target, prop);
-      },
-    });
+    const brokenDb = createFailingBatchDb(env.DB, "SQLITE_BUSY: database is locked");
 
     const req = new Request("http://localhost/api/health", { method: "GET" });
     const res = await app.fetch(req, { ...env, DB: brokenDb });
@@ -122,14 +127,7 @@ describe("Milestone 1: D1 Schema & Health Route", () => {
 
   it("GET /api/health returns HTTP 200 with initialized: true when SYNC_ADMIN_SECRET is set even if DB fails", async () => {
     resetSchemaInitCache();
-    const brokenDb = new Proxy(env.DB, {
-      get(target, prop) {
-        if (prop === "batch") {
-          return () => Promise.reject(new Error("SQLITE_BUSY: database is locked"));
-        }
-        return Reflect.get(target, prop);
-      },
-    });
+    const brokenDb = createFailingBatchDb(env.DB, "SQLITE_BUSY: database is locked");
 
     const customEnv = {
       ...env,
@@ -152,14 +150,7 @@ describe("Milestone 1: D1 Schema & Health Route", () => {
 
   it("app.onError returns JSON 500 when an unhandled error occurs on an API route", async () => {
     resetSchemaInitCache();
-    const brokenDb = new Proxy(env.DB, {
-      get(target, prop) {
-        if (prop === "batch") {
-          return () => Promise.reject(new Error("Database disconnected"));
-        }
-        return Reflect.get(target, prop);
-      },
-    });
+    const brokenDb = createFailingBatchDb(env.DB, "Database disconnected");
 
     const req = new Request("http://localhost/api/sync/pull", { method: "POST" });
     const res = await app.fetch(req, { ...env, DB: brokenDb });

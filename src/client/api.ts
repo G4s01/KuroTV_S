@@ -121,6 +121,23 @@ export interface PullLibraryResponse {
   tombstones: Array<{ type: string; key: string; deletedAt: number }>;
 }
 
+export interface MalAccountSummary {
+  profileId: string;
+  profileName: string;
+  avatarColor: string;
+  connected: boolean;
+  clientId: string | null;
+  tokenType: string | null;
+  expiresAt: number | null;
+  isExpired: boolean;
+  username: string | null;
+  userId: number | null;
+  picture: string | null;
+  updatedAt: number | null;
+  serverUpdatedAt: number | null;
+  revokedAt: number | null;
+}
+
 export class KuroSyncApi {
   private token: string | null = null;
   private activeProfileId: string | null = null;
@@ -455,6 +472,58 @@ export class KuroSyncApi {
     return this.request<{ ok: boolean; message: string; counts?: any }>('/api/sync/import', {
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+  }
+
+  /**
+   * MyAnimeList Per-Profile Accounts & OAuth Management
+   */
+  public async listMalAccounts(
+    profileId?: string
+  ): Promise<{ ok: boolean; accounts: MalAccountSummary[] }> {
+    const url = profileId
+      ? `/api/mal/accounts?profileId=${encodeURIComponent(profileId)}`
+      : '/api/mal/accounts';
+    return this.request<{ ok: boolean; accounts: MalAccountSummary[] }>(url);
+  }
+
+  public async exchangeMalOAuth(payload: {
+    profileId: string;
+    clientId: string;
+    code: string;
+    codeVerifier: string;
+    redirectUri: string;
+  }): Promise<{ ok: boolean; account: MalAccountSummary }> {
+    return this.request<{ ok: boolean; account: MalAccountSummary }>('/api/mal/oauth/exchange', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  public async refreshMalAccount(
+    profileId: string
+  ): Promise<{ ok: boolean; account: MalAccountSummary }> {
+    return this.request<{ ok: boolean; account: MalAccountSummary }>(
+      `/api/mal/accounts/${encodeURIComponent(profileId)}/refresh`,
+      { method: 'POST' }
+    );
+  }
+
+  public async disconnectMalAccount(
+    profileId: string
+  ): Promise<{
+    ok: boolean;
+    profileId: string;
+    disconnectedAt: number;
+    account: MalAccountSummary;
+  }> {
+    return this.request<{
+      ok: boolean;
+      profileId: string;
+      disconnectedAt: number;
+      account: MalAccountSummary;
+    }>(`/api/mal/accounts/${encodeURIComponent(profileId)}`, {
+      method: 'DELETE',
     });
   }
 }

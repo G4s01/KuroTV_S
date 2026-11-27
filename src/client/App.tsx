@@ -8,11 +8,14 @@ import { LibraryView } from './views/Dashboard/LibraryView';
 import { ProfilesView } from './views/Dashboard/ProfilesView';
 import { DevicesView } from './views/Dashboard/DevicesView';
 import { BackupView } from './views/Dashboard/BackupView';
+import { MalView, type MalViewStatusMessage } from './views/Dashboard/MalView';
 import { Modal } from './components/Modal';
 import { Button } from './components/Button';
+import { completeMalOAuthFromSearch } from './malOAuth';
 import {
   api,
   type HealthResponse,
+  type MalAccountSummary,
   type ProfileRecord,
 } from './api';
 
@@ -27,7 +30,7 @@ const AVATAR_COLORS = [
   '#64748B',
 ];
 
-export type DashboardTab = 'library' | 'profiles' | 'devices' | 'backup';
+export type DashboardTab = 'library' | 'profiles' | 'devices' | 'mal' | 'backup';
 
 export const App: React.FC = () => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -47,6 +50,9 @@ export const App: React.FC = () => {
   const [newProfileColor, setNewProfileColor] = useState('#E50914');
   const [creatingProfile, setCreatingProfile] = useState(false);
   const [createProfileError, setCreateProfileError] = useState<string | null>(null);
+  const [malAccounts, setMalAccounts] = useState<MalAccountSummary[]>([]);
+  const [malPreselectProfileId, setMalPreselectProfileId] = useState<string | null>(null);
+  const [malStatusBanner, setMalStatusBanner] = useState<MalViewStatusMessage | null>(null);
 
   // Parse path and query params on mount & on popstate
   const updateRouteFromLocation = useCallback(() => {
@@ -111,11 +117,56 @@ export const App: React.FC = () => {
     }
   }, [isAuthenticated]);
 
+  const loadMalAccounts = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      const res = await api.listMalAccounts();
+      setMalAccounts(res.accounts || []);
+    } catch {
+      // Ignore transient error; MalView surfaces explicit errors when active
+    }
+  }, [isAuthenticated]);
+
   useEffect(() => {
     if (isAuthenticated) {
       loadProfiles();
+      loadMalAccounts();
     }
-  }, [isAuthenticated, loadProfiles]);
+  }, [isAuthenticated, loadProfiles, loadMalAccounts]);
+
+  // Complete MyAnimeList OAuth 2.0 PKCE callback redirect (/mal-callback)
+  useEffect(() => {
+    if (!isAuthenticated || typeof window === 'undefined') return;
+    if (currentPath !== '/mal-callback' && !currentPath.startsWith('/mal-callback/')) return;
+
+    const search = window.location.search;
+    window.history.replaceState({}, '', '/');
+    setCurrentPath('/');
+    setActiveTab('mal');
+    setMalStatusBanner({
+      type: 'loading',
+      text: 'Completamento collegamento MyAnimeList in corso...',
+    });
+
+    let active = true;
+    completeMalOAuthFromSearch(search).then((outcome) => {
+      if (!active) return;
+      setMalStatusBanner({
+        type: outcome.ok ? 'success' : 'error',
+        text: outcome.message,
+      });
+      if (outcome.ok) {
+        if (outcome.profileId) {
+          handleSelectProfile(outcome.profileId);
+        }
+        loadMalAccounts();
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated, currentPath, loadMalAccounts]);
 
   const handleSelectProfile = (id: string) => {
     api.setActiveProfileId(id);
@@ -147,6 +198,9 @@ export const App: React.FC = () => {
     setIsAuthenticated(false);
     setProfiles([]);
     setActiveProfileId(null);
+    setMalAccounts([]);
+    setMalPreselectProfileId(null);
+    setMalStatusBanner(null);
   };
 
   const handleLoginSuccess = () => {
@@ -348,6 +402,28 @@ export const App: React.FC = () => {
             DISPOSITIVI
           </button>
           <button
+            onClick={() => setActiveTab('mal')}
+            style={{
+              padding: '8px 16px',
+              fontFamily: FONT_MONO,
+              fontSize: '13px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              borderRadius: oledTheme.radius.sm,
+              border: `1px solid ${
+                activeTab === 'mal' ? oledTheme.colors.primary : 'transparent'
+              }`,
+              backgroundColor:
+                activeTab === 'mal' ? 'rgba(229, 9, 20, 0.15)' : 'transparent',
+              color: activeTab === 'mal' ? '#FFFFFF' : oledTheme.colors.textSecondary,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            MYANIMELIST
+          </button>
+          <button
             onClick={() => setActiveTab('backup')}
             style={{
               padding: '8px 16px',
@@ -377,8 +453,16 @@ export const App: React.FC = () => {
           <ProfilesView
             profiles={profiles}
             activeProfileId={activeProfileId}
-            onRefreshProfiles={loadProfiles}
+            malAccounts={malAccounts}
+            onRefreshProfiles={async () => {
+              await loadProfiles();
+              await loadMalAccounts();
+            }}
             onSelectProfile={handleSelectProfile}
+            onManageMal={(profileId) => {
+              setMalPreselectProfileId(profileId);
+              setActiveTab('mal');
+            }}
           />
         )}
         {activeTab === 'devices' && (
@@ -387,7 +471,25 @@ export const App: React.FC = () => {
             onOpenTvPair={() => setIsTvPairModalOpen(true)}
           />
         )}
-        {activeTab === 'backup' && <BackupView onRestoreSuccess={loadProfiles} />}
+        {activeTab === 'mal' && (
+          <MalView
+            profiles={profiles}
+            activeProfileId={activeProfileId}
+            preselectedProfileId={malPreselectProfileId}
+            onClearPreselectedProfile={() => setMalPreselectProfileId(null)}
+            externalStatus={malStatusBanner}
+            onClearExternalStatus={() => setMalStatusBanner(null)}
+            onAccountsUpdated={setMalAccounts}
+          />
+        )}
+        {activeTab === 'backup' && (
+          <BackupView
+            onRestoreSuccess={() => {
+              loadProfiles();
+              loadMalAccounts();
+            }}
+          />
+        )}
       </main>
 
       {/* TV Pair Quick Modal */}
