@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { oledTheme, FONT_MONO } from './theme';
 import { Navbar } from './components/Navbar';
 import { SetupWizard } from './views/SetupWizard';
@@ -53,6 +53,25 @@ export const App: React.FC = () => {
   const [malAccounts, setMalAccounts] = useState<MalAccountSummary[]>([]);
   const [malPreselectProfileId, setMalPreselectProfileId] = useState<string | null>(null);
   const [malStatusBanner, setMalStatusBanner] = useState<MalViewStatusMessage | null>(null);
+  const [malRefreshTick, setMalRefreshTick] = useState(0);
+  const [pendingMalCallbackSearch, setPendingMalCallbackSearch] = useState<string | null>(() => {
+    if (
+      typeof window !== 'undefined' &&
+      (window.location.pathname === '/mal-callback' ||
+        window.location.pathname.startsWith('/mal-callback/'))
+    ) {
+      return window.location.search || '?';
+    }
+    return null;
+  });
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Parse path and query params on mount & on popstate
   const updateRouteFromLocation = useCallback(() => {
@@ -61,6 +80,9 @@ export const App: React.FC = () => {
     const searchParams = new URLSearchParams(window.location.search);
     const code = searchParams.get('code') || '';
     setCurrentPath(path);
+    if (path === '/mal-callback' || path.startsWith('/mal-callback/')) {
+      setPendingMalCallbackSearch(window.location.search || '?');
+    }
     if (code) {
       setPairCodeParam(code);
     }
@@ -136,21 +158,25 @@ export const App: React.FC = () => {
 
   // Complete MyAnimeList OAuth 2.0 PKCE callback redirect (/mal-callback)
   useEffect(() => {
-    if (!isAuthenticated || typeof window === 'undefined') return;
-    if (currentPath !== '/mal-callback' && !currentPath.startsWith('/mal-callback/')) return;
+    if (!isAuthenticated || !pendingMalCallbackSearch || typeof window === 'undefined') return;
 
-    const search = window.location.search;
-    window.history.replaceState({}, '', '/');
-    setCurrentPath('/');
+    const search = pendingMalCallbackSearch;
+    if (
+      window.location.pathname === '/mal-callback' ||
+      window.location.pathname.startsWith('/mal-callback/')
+    ) {
+      window.history.replaceState({}, '', '/');
+      setCurrentPath('/');
+    }
     setActiveTab('mal');
     setMalStatusBanner({
       type: 'loading',
       text: 'Completamento collegamento MyAnimeList in corso...',
     });
 
-    let active = true;
     completeMalOAuthFromSearch(search).then((outcome) => {
-      if (!active) return;
+      if (!isMountedRef.current) return;
+      setPendingMalCallbackSearch(null);
       setMalStatusBanner({
         type: outcome.ok ? 'success' : 'error',
         text: outcome.message,
@@ -159,14 +185,11 @@ export const App: React.FC = () => {
         if (outcome.profileId) {
           handleSelectProfile(outcome.profileId);
         }
+        setMalRefreshTick((n) => n + 1);
         loadMalAccounts();
       }
     });
-
-    return () => {
-      active = false;
-    };
-  }, [isAuthenticated, currentPath, loadMalAccounts]);
+  }, [isAuthenticated, pendingMalCallbackSearch, loadMalAccounts]);
 
   const handleSelectProfile = (id: string) => {
     api.setActiveProfileId(id);
@@ -479,6 +502,7 @@ export const App: React.FC = () => {
             onClearPreselectedProfile={() => setMalPreselectProfileId(null)}
             externalStatus={malStatusBanner}
             onClearExternalStatus={() => setMalStatusBanner(null)}
+            refreshTrigger={malRefreshTick}
             onAccountsUpdated={setMalAccounts}
           />
         )}

@@ -44,6 +44,7 @@ interface MalViewProps {
   onClearPreselectedProfile?: () => void;
   externalStatus?: MalViewStatusMessage | null;
   onClearExternalStatus?: () => void;
+  refreshTrigger?: number;
   onAccountsUpdated?: (accounts: MalAccountSummary[]) => void;
 }
 
@@ -72,6 +73,7 @@ export const MalView: React.FC<MalViewProps> = ({
   onClearPreselectedProfile,
   externalStatus,
   onClearExternalStatus,
+  refreshTrigger = 0,
   onAccountsUpdated,
 }) => {
   const [accounts, setAccounts] = useState<MalAccountSummary[]>([]);
@@ -134,7 +136,7 @@ export const MalView: React.FC<MalViewProps> = ({
 
   useEffect(() => {
     fetchAccounts();
-  }, [fetchAccounts, profiles.length]);
+  }, [fetchAccounts, profiles.length, refreshTrigger]);
 
   useEffect(() => {
     return () => {
