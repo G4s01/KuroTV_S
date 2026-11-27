@@ -431,6 +431,13 @@ KuroTV_S supports profile-isolated synchronization of **MyAnimeList OAuth creden
   - Updates resolve Last-Write-Wins via client `updatedAt >= existing.updated_at` while committing `server_updated_at` for reliable `since` delta replication across offline devices.
   - A `'mal_auth'` tombstone blocks stale pushes where `updatedAt <= tombstone.deleted_at`; a newer re-login (`updatedAt > tombstone.deleted_at`) invalidates the tombstone and restores `mal_auth`.
 
+### Web Console MAL Management & Direct OAuth PKCE (`/api/mal/*`)
+- Administrators can also inspect, link, refresh, and disconnect per-profile MAL associations directly from the Web Console **MYANIMELIST** tab (`MalView.tsx`):
+  - `GET /api/mal/accounts`: returns sanitized connection metadata across all profiles for `web` sessions without exposing raw `accessToken`/`refreshToken` (`mobile`/`tv` tokens are restricted to their own `profile_id`).
+  - `POST /api/mal/oauth/exchange`: performs server-side PKCE `plain` token exchange against MyAnimeList (avoiding browser CORS limits) using the Web Console's dynamic `<window.location.origin>/mal-callback` redirect URI, clears any prior `'mal_auth'` tombstone, and persists the resulting `MalAuthSyncRecord` so paired `KuroTV_M` clients receive it on the next sync pull.
+  - `POST /api/mal/accounts/:profileId/refresh` & `DELETE /api/mal/accounts/:profileId`: refresh active OAuth tokens/`@me` metadata or unlink MAL cleanly while committing a `'mal_auth'` tombstone for connected clients.
+  - On `myanimelist.net/apiconfig/create`, register **App Type: `Android`** or **`other`** (not `web`) and add both `<origin>/mal-callback` and `kurotv://mal-callback` on separate lines under **App Redirect URL** so the same `Client ID` works seamlessly across Web Panel and `KuroTV_M`.
+
 ---
 
 ## 12. Zero-Dependency Client Initialization Example

@@ -13,6 +13,13 @@ import { Modal } from './components/Modal';
 import { Button } from './components/Button';
 import { completeMalOAuthFromSearch } from './malOAuth';
 import {
+  FilmIcon,
+  UserIcon,
+  TvIcon,
+  MalIcon,
+  DownloadIcon,
+} from './components/Icons';
+import {
   api,
   type HealthResponse,
   type MalAccountSummary,
@@ -171,7 +178,7 @@ export const App: React.FC = () => {
     setActiveTab('mal');
     setMalStatusBanner({
       type: 'loading',
-      text: 'Completamento collegamento MyAnimeList in corso...',
+      text: 'COMPLETAMENTO COLLEGAMENTO MYANIMELIST IN CORSO...',
     });
 
     completeMalOAuthFromSearch(search).then((outcome) => {
@@ -210,7 +217,9 @@ export const App: React.FC = () => {
         handleSelectProfile(res.profile.id);
       }
     } catch (err: any) {
-      setCreateProfileError(err?.message || 'Impossibile creare il profilo.');
+      setCreateProfileError(
+        String(err?.message || 'IMPOSSIBILE CREARE IL PROFILO.').toUpperCase()
+      );
     } finally {
       setCreatingProfile(false);
     }
@@ -358,116 +367,63 @@ export const App: React.FC = () => {
             overflowX: 'auto',
           }}
         >
-          <button
-            onClick={() => setActiveTab('library')}
-            style={{
-              padding: '8px 16px',
-              fontFamily: FONT_MONO,
-              fontSize: '13px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              borderRadius: oledTheme.radius.sm,
-              border: `1px solid ${
-                activeTab === 'library' ? oledTheme.colors.primary : 'transparent'
-              }`,
-              backgroundColor:
-                activeTab === 'library' ? 'rgba(229, 9, 20, 0.15)' : 'transparent',
-              color: activeTab === 'library' ? '#FFFFFF' : oledTheme.colors.textSecondary,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            LIBRERIA
-          </button>
-          <button
-            onClick={() => setActiveTab('profiles')}
-            style={{
-              padding: '8px 16px',
-              fontFamily: FONT_MONO,
-              fontSize: '13px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              borderRadius: oledTheme.radius.sm,
-              border: `1px solid ${
-                activeTab === 'profiles' ? oledTheme.colors.primary : 'transparent'
-              }`,
-              backgroundColor:
-                activeTab === 'profiles' ? 'rgba(229, 9, 20, 0.15)' : 'transparent',
-              color: activeTab === 'profiles' ? '#FFFFFF' : oledTheme.colors.textSecondary,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            PROFILI
-          </button>
-          <button
-            onClick={() => setActiveTab('devices')}
-            style={{
-              padding: '8px 16px',
-              fontFamily: FONT_MONO,
-              fontSize: '13px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              borderRadius: oledTheme.radius.sm,
-              border: `1px solid ${
-                activeTab === 'devices' ? oledTheme.colors.primary : 'transparent'
-              }`,
-              backgroundColor:
-                activeTab === 'devices' ? 'rgba(229, 9, 20, 0.15)' : 'transparent',
-              color: activeTab === 'devices' ? '#FFFFFF' : oledTheme.colors.textSecondary,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            DISPOSITIVI
-          </button>
-          <button
-            onClick={() => setActiveTab('mal')}
-            style={{
-              padding: '8px 16px',
-              fontFamily: FONT_MONO,
-              fontSize: '13px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              borderRadius: oledTheme.radius.sm,
-              border: `1px solid ${
-                activeTab === 'mal' ? oledTheme.colors.primary : 'transparent'
-              }`,
-              backgroundColor:
-                activeTab === 'mal' ? 'rgba(229, 9, 20, 0.15)' : 'transparent',
-              color: activeTab === 'mal' ? '#FFFFFF' : oledTheme.colors.textSecondary,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            MYANIMELIST
-          </button>
-          <button
-            onClick={() => setActiveTab('backup')}
-            style={{
-              padding: '8px 16px',
-              fontFamily: FONT_MONO,
-              fontSize: '13px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              borderRadius: oledTheme.radius.sm,
-              border: `1px solid ${
-                activeTab === 'backup' ? oledTheme.colors.primary : 'transparent'
-              }`,
-              backgroundColor:
-                activeTab === 'backup' ? 'rgba(229, 9, 20, 0.15)' : 'transparent',
-              color: activeTab === 'backup' ? '#FFFFFF' : oledTheme.colors.textSecondary,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            BACKUP
-          </button>
+          {(
+            [
+              {
+                id: 'library',
+                label: 'LIBRERIA',
+                icon: <FilmIcon size={15} color="#E50914" aria-hidden="true" />,
+              },
+              {
+                id: 'profiles',
+                label: 'PROFILI',
+                icon: <UserIcon size={15} color="#3B82F6" aria-hidden="true" />,
+              },
+              {
+                id: 'devices',
+                label: 'DISPOSITIVI',
+                icon: <TvIcon size={15} color="#10B981" aria-hidden="true" />,
+              },
+              {
+                id: 'mal',
+                label: 'MYANIMELIST',
+                icon: <MalIcon size={16} aria-hidden="true" />,
+              },
+              {
+                id: 'backup',
+                label: 'BACKUP',
+                icon: <DownloadIcon size={15} color="#F59E0B" aria-hidden="true" />,
+              },
+            ] as const
+          ).map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  fontFamily: FONT_MONO,
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  borderRadius: oledTheme.radius.sm,
+                  border: `1px solid ${isActive ? oledTheme.colors.primary : 'transparent'}`,
+                  backgroundColor: isActive ? 'rgba(229, 9, 20, 0.15)' : 'transparent',
+                  color: isActive ? '#FFFFFF' : oledTheme.colors.textSecondary,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Tab Views */}
@@ -538,7 +494,7 @@ export const App: React.FC = () => {
       <Modal
         isOpen={isBackupModalOpen}
         onClose={() => setIsBackupModalOpen(false)}
-        title="BACKUP &amp; RESTORE"
+        title="BACKUP & RESTORE"
         maxWidth="700px"
       >
         <BackupView onRestoreSuccess={loadProfiles} />

@@ -67,10 +67,12 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
     try {
       const info = await api.getPairInfo(pairCode);
       setPairInfo(info);
-      setDeviceLabel(info.deviceName || 'Android TV');
+      setDeviceLabel((info.deviceName || 'ANDROID TV').toUpperCase());
     } catch (err: any) {
       setPairInfo(null);
-      setError(err?.message || 'Codice TV non valido o scaduto.');
+      setError(
+        err?.message ? String(err.message).toUpperCase() : 'CODICE TV NON VALIDO O SCADUTO.'
+      );
     } finally {
       setLoadingInfo(false);
     }
@@ -93,11 +95,11 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
 
   const handleApprove = async () => {
     if (!code || code.length !== 6) {
-      setError('Inserisci un codice valido di 6 caratteri.');
+      setError('INSERISCI UN CODICE VALIDO DI 6 CARATTERI.');
       return;
     }
     if (!selectedProfileId) {
-      setError('Seleziona un profilo da associare alla TV.');
+      setError('SELEZIONA UN PROFILO DA ASSOCIARE ALLA TV.');
       return;
     }
 
@@ -108,7 +110,9 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
       setSuccess(true);
       if (onComplete) onComplete();
     } catch (err: any) {
-      setError(err?.message || 'Impossibile autorizzare la TV.');
+      setError(
+        err?.message ? String(err.message).toUpperCase() : 'IMPOSSIBILE AUTORIZZARE LA TV.'
+      );
     } finally {
       setApproving(false);
     }
@@ -154,7 +158,7 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
               margin: '0 0 18px 0',
             }}
           >
-            La tua TV ha ricevuto le credenziali di sincronizzazione ed è ora collegata. Puoi tornare alla TV.
+            LA TUA TV HA RICEVUTO LE CREDENZIALI DI SINCRONIZZAZIONE ED È ORA COLLEGATA. PUOI TORNARE ALLA TV.
           </p>
           {onNavigateHome && (
             <Button variant="primary" onClick={onNavigateHome} style={{ width: '100%' }}>
@@ -285,7 +289,7 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
               marginBottom: '6px',
             }}
           >
-            Associa al Profilo
+            ASSOCIA AL PROFILO
           </label>
           <select
             value={selectedProfileId}
@@ -310,7 +314,7 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
                 value={p.id}
                 style={{ backgroundColor: '#121212', color: '#FFFFFF' }}
               >
-                {p.name}
+                {p.name.toUpperCase()}
               </option>
             ))}
           </select>
@@ -329,13 +333,13 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
               marginBottom: '6px',
             }}
           >
-            Nome Dispositivo (Opzionale)
+            NOME DISPOSITIVO (OPZIONALE)
           </label>
           <input
             type="text"
             value={deviceLabel}
             onChange={(e) => setDeviceLabel(e.target.value)}
-            placeholder="es. Smart TV Salotto"
+            placeholder="ES. SMART TV SALOTTO"
             style={{
               width: '100%',
               padding: '8px 12px',
@@ -446,7 +450,7 @@ export const TvPairView: React.FC<TvPairViewProps> = ({
               margin: 0,
             }}
           >
-            Inserisci il codice di 6 caratteri mostrato sullo schermo della TV.
+            INSERISCI IL CODICE DI 6 CARATTERI MOSTRATO SULLO SCHERMO DELLA TV.
           </p>
         </div>
 

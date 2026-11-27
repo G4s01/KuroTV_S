@@ -15,7 +15,7 @@ Tests execute inside the real Cloudflare Workers `workerd` runtime (`@cloudflare
 
 ## Suite-by-Suite Coverage Checklist
 
-### Tier 1: Core Feature Coverage (146 tests)
+### Tier 1: Core Feature Coverage (136 tests)
 - [x] `test/health.test.ts` (10 tests): Public `/api/health` status, routing, CORS headers, idempotent `ensureSchema` (11 tables & 13 indexes).
 - [x] `test/tier1-feature-coverage/health-schema.test.ts` (10 tests): Features 1 & 2 (Hono foundation, D1 DDL & idempotent `ensureSchema` across all 11 tables & 13 indexes).
 - [x] `test/tier1-feature-coverage/setup-auth.test.ts` (26 tests): Features 3, 4, 5, 6 (Zero-config setup, master PBKDF2 authentication, QR token exchange, device tokens, logout revocation, in-memory rate limiting).

@@ -46,9 +46,9 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setSuccessMsg('Backup export generated and downloaded successfully.');
+      setSuccessMsg('ESPORTAZIONE BACKUP GENERATA E SCARICATA CON SUCCESSO.');
     } catch (err: any) {
-      setError(err?.message || 'Failed to export backup.');
+      setError(err?.message ? String(err.message).toUpperCase() : 'IMPOSSIBILE ESPORTARE IL BACKUP.');
     } finally {
       setExporting(false);
     }
@@ -67,7 +67,7 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
         const parsed = JSON.parse(event.target?.result as string);
         setImportPayload(parsed);
       } catch {
-        setError('Selected file is not valid JSON.');
+        setError('IL FILE SELEZIONATO NON È UN JSON VALIDO.');
         setImportPayload(null);
       }
     };
@@ -79,22 +79,25 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
     setConfirmModal({
       isOpen: true,
       title: 'RIPRISTINA BACKUP',
-      message:
-        'Sei sicuro di voler ripristinare questo backup sulla tua istanza?',
+      message: 'SEI SICURO DI VOLER RIPRISTINARE QUESTO BACKUP SULLA TUA ISTANZA?',
       submessage:
-        'I record esistenti verranno aggiornati con i dati del file e gli eventuali profili mancanti verranno creati.',
+        'I RECORD ESISTENTI VERRANNO AGGIORNATI CON I DATI DEL FILE E GLI EVENTUALI PROFILI MANCANTI VERRANNO CREATI.',
       onConfirm: async () => {
         setImporting(true);
         setError(null);
         setSuccessMsg(null);
         try {
           const res = await api.importBackup(importPayload);
-          setSuccessMsg(res.message || 'Backup successfully restored to instance.');
+          setSuccessMsg(
+            res.message ? String(res.message).toUpperCase() : 'BACKUP RIPRISTINATO SULLA ISTANZA.'
+          );
           setImportPayload(null);
           setFileName(null);
           if (onRestoreSuccess) onRestoreSuccess();
         } catch (err: any) {
-          setError(err?.message || 'Failed to restore backup.');
+          setError(
+            err?.message ? String(err.message).toUpperCase() : 'IMPOSSIBILE RIPRISTINARE IL BACKUP.'
+          );
         } finally {
           setImporting(false);
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
@@ -119,9 +122,13 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
             color: '#FFFFFF',
             margin: '0 0 4px 0',
             textTransform: 'uppercase',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
           }}
         >
-          BACKUP &amp; RIPRISTINO
+          <DownloadIcon size={20} color="#F59E0B" aria-hidden="true" />
+          <span>BACKUP &amp; RIPRISTINO</span>
         </h2>
         <p
           style={{
@@ -192,9 +199,13 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
                 color: '#FFFFFF',
                 margin: '0 0 6px 0',
                 textTransform: 'uppercase',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
               }}
             >
-              ESPORTA BACKUP JSON
+              <DownloadIcon size={16} color="#10B981" aria-hidden="true" />
+              <span>ESPORTA BACKUP JSON</span>
             </h3>
             <p
               style={{
@@ -230,9 +241,13 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
                 color: '#FFFFFF',
                 margin: '0 0 6px 0',
                 textTransform: 'uppercase',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
               }}
             >
-              RIPRISTINA BACKUP JSON
+              <UploadIcon size={16} color="#F59E0B" aria-hidden="true" />
+              <span>RIPRISTINA BACKUP JSON</span>
             </h3>
             <p
               style={{
@@ -266,7 +281,7 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
               style={{ display: 'none' }}
             />
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-              <UploadIcon size={24} color={fileName ? '#E50914' : oledTheme.colors.textMuted} />
+              <UploadIcon size={24} color={fileName ? '#10B981' : '#F59E0B'} aria-hidden="true" />
               <span
                 style={{
                   fontFamily: FONT_MONO,
@@ -324,7 +339,7 @@ export const BackupView: React.FC<BackupViewProps> = ({ onRestoreSuccess }) => {
             disabled={!importPayload}
             loading={importing}
             onClick={handleImport}
-            icon={<UploadIcon size={16} />}
+            icon={<UploadIcon size={16} color={importPayload ? '#F59E0B' : 'currentColor'} aria-hidden="true" />}
           >
             RIPRISTINA SU ISTANZA
           </Button>

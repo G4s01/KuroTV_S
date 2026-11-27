@@ -11,6 +11,7 @@ import {
   HelpCircleIcon,
   KeyIcon,
   LinkIcon,
+  MalIcon,
   RefreshIcon,
   TrashIcon,
   UserIcon,
@@ -63,7 +64,7 @@ function formatClientIdPreview(clientId: string): string {
 
 function formatDateTime(ts?: number | null): string {
   if (!ts || !Number.isFinite(ts) || ts <= 0) return 'N/D';
-  return new Date(ts).toLocaleString();
+  return new Date(ts).toLocaleString().toUpperCase();
 }
 
 export const MalView: React.FC<MalViewProps> = ({
@@ -127,7 +128,9 @@ export const MalView: React.FC<MalViewProps> = ({
     } catch (err: any) {
       setStatusMsg({
         type: 'error',
-        text: err?.message || 'Impossibile caricare le associazioni MyAnimeList.',
+        text: err?.message
+          ? String(err.message).toUpperCase()
+          : 'IMPOSSIBILE CARICARE LE ASSOCIAZIONI MYANIMELIST.',
       });
     } finally {
       setLoading(false);
@@ -197,7 +200,7 @@ export const MalView: React.FC<MalViewProps> = ({
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     setCopiedKey(ok ? key : null);
 
-    let announcement = ok ? `${description} copiato` : 'Copia non riuscita';
+    let announcement = ok ? `${description.toUpperCase()} COPIATO` : 'COPIA NON RIUSCITA';
     if (announcement === lastCopyAnnouncementRef.current) {
       announcement += '\u00A0';
     }
@@ -213,10 +216,10 @@ export const MalView: React.FC<MalViewProps> = ({
   const validateClientIdValue = (raw: string): string | null => {
     const clean = normalizeMalClientId(raw);
     if (!clean) {
-      return 'Inserisci il Client ID della tua app MyAnimeList.';
+      return 'INSERISCI IL CLIENT ID DELLA TUA APP MYANIMELIST.';
     }
     if (!isValidMalClientId(clean)) {
-      return 'Formato non valido: servono 16-128 caratteri alfanumerici (solo lettere e cifre).';
+      return 'FORMATO NON VALIDO: SERVONO 16-128 CARATTERI ALFANUMERICI (SOLO LETTERE E CIFRE).';
     }
     return null;
   };
@@ -248,7 +251,7 @@ export const MalView: React.FC<MalViewProps> = ({
     }
 
     if (!targetProfileId) {
-      setStatusMsg({ type: 'error', text: 'Seleziona un profilo KuroSync valido.' });
+      setStatusMsg({ type: 'error', text: 'SELEZIONA UN PROFILO KUROSYNC VALIDO.' });
       return;
     }
 
@@ -281,13 +284,17 @@ export const MalView: React.FC<MalViewProps> = ({
       const res = await api.refreshMalAccount(acc.profileId);
       setStatusMsg({
         type: 'success',
-        text: `Token MAL aggiornato per ${acc.profileName}${res.account?.username ? ` (@${res.account.username})` : ''}.`,
+        text: `TOKEN MAL AGGIORNATO PER ${acc.profileName.toUpperCase()}${
+          res.account?.username ? ` (@${res.account.username.toUpperCase()})` : ''
+        }.`,
       });
       await fetchAccounts();
     } catch (err: any) {
       setStatusMsg({
         type: 'error',
-        text: err?.message || `Impossibile aggiornare il token MAL per ${acc.profileName}.`,
+        text: err?.message
+          ? String(err.message).toUpperCase()
+          : `IMPOSSIBILE AGGIORNARE IL TOKEN MAL PER ${acc.profileName.toUpperCase()}.`,
       });
     } finally {
       setRefreshingId(null);
@@ -305,14 +312,16 @@ export const MalView: React.FC<MalViewProps> = ({
       await api.disconnectMalAccount(acc.profileId);
       setStatusMsg({
         type: 'success',
-        text: `Account MAL scollegato dal profilo ${acc.profileName}. I dispositivi sincronizzati riceveranno la disconnessione.`,
+        text: `ACCOUNT MAL SCOLLEGATO DAL PROFILO ${acc.profileName.toUpperCase()}. I DISPOSITIVI SINCRONIZZATI RICEVERANNO LA DISCONNESSIONE.`,
       });
       setConfirmDisconnect({ isOpen: false, account: null });
       await fetchAccounts();
     } catch (err: any) {
       setStatusMsg({
         type: 'error',
-        text: err?.message || `Impossibile scollegare MAL da ${acc.profileName}.`,
+        text: err?.message
+          ? String(err.message).toUpperCase()
+          : `IMPOSSIBILE SCOLLEGARE MAL DA ${acc.profileName.toUpperCase()}.`,
       });
     } finally {
       setDisconnectingId(null);
@@ -380,9 +389,13 @@ export const MalView: React.FC<MalViewProps> = ({
               color: '#FFFFFF',
               margin: '0 0 4px 0',
               textTransform: 'uppercase',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
             }}
           >
-            ACCESSI MYANIMELIST ({connectedCount}/{accounts.length || profiles.length})
+            <MalIcon size={24} aria-hidden="true" />
+            <span>ACCESSI MYANIMELIST ({connectedCount}/{accounts.length || profiles.length})</span>
           </h2>
           <p
             style={{
@@ -420,7 +433,7 @@ export const MalView: React.FC<MalViewProps> = ({
               minHeight: '30px',
             }}
           >
-            <ExternalLinkIcon size={13} aria-hidden="true" />
+            <ExternalLinkIcon size={13} color="#3B82F6" aria-hidden="true" />
             APRI APICONFIG MAL
           </a>
 
@@ -430,8 +443,8 @@ export const MalView: React.FC<MalViewProps> = ({
             size="sm"
             onClick={fetchAccounts}
             loading={loading}
-            icon={<RefreshIcon size={14} aria-hidden="true" />}
-            aria-label="Aggiorna associazioni MyAnimeList"
+            icon={<RefreshIcon size={14} color="#10B981" aria-hidden="true" />}
+            aria-label="AGGIORNA ASSOCIAZIONI MYANIMELIST"
           />
         </div>
       </div>
@@ -469,16 +482,15 @@ export const MalView: React.FC<MalViewProps> = ({
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '10px',
-            textTransform: 'none',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
             {activeBanner.type === 'success' ? (
-              <CheckIcon size={16} aria-hidden="true" />
+              <CheckIcon size={16} color="#10B981" aria-hidden="true" />
             ) : activeBanner.type === 'error' ? (
-              <AlertCircleIcon size={16} aria-hidden="true" />
+              <AlertCircleIcon size={16} color="#EF4444" aria-hidden="true" />
             ) : (
-              <RefreshIcon size={16} aria-hidden="true" />
+              <RefreshIcon size={16} color="#3B82F6" aria-hidden="true" />
             )}
             <span>{activeBanner.text}</span>
           </div>
@@ -489,7 +501,7 @@ export const MalView: React.FC<MalViewProps> = ({
                 setStatusMsg(null);
                 onClearExternalStatus?.();
               }}
-              aria-label="Chiudi avviso"
+              aria-label="CHIUDI AVVISO"
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -581,7 +593,7 @@ export const MalView: React.FC<MalViewProps> = ({
                 minHeight: '32px',
               }}
             >
-              <HelpCircleIcon size={14} color={oledTheme.colors.primary} aria-hidden="true" />
+              <HelpCircleIcon size={14} color="#F59E0B" aria-hidden="true" />
               <span>{isGuideOpen ? 'NASCONDI GUIDA FORM MAL' : 'GUIDA COMPILAZIONE CLIENT ID'}</span>
               <span
                 style={{
@@ -590,7 +602,7 @@ export const MalView: React.FC<MalViewProps> = ({
                   transition: 'transform 0.15s ease',
                 }}
               >
-                <ChevronDownIcon size={14} aria-hidden="true" />
+                <ChevronDownIcon size={14} color={oledTheme.colors.textSecondary} aria-hidden="true" />
               </span>
             </button>
           </div>
@@ -602,7 +614,7 @@ export const MalView: React.FC<MalViewProps> = ({
               style={{
                 backgroundColor: '#070707',
                 border: `1px solid ${oledTheme.colors.border}`,
-                borderLeft: `3px solid ${oledTheme.colors.primary}`,
+                borderLeft: '3px solid #2E51A2',
                 borderRadius: oledTheme.radius.sm,
                 padding: '16px',
                 display: 'flex',
@@ -628,9 +640,13 @@ export const MalView: React.FC<MalViewProps> = ({
                     fontWeight: 700,
                     color: '#FFFFFF',
                     textTransform: 'uppercase',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
                   }}
                 >
-                  COME COMPILARE MYANIMELIST.NET/APICONFIG/CREATE
+                  <MalIcon size={16} aria-hidden="true" />
+                  <span>COME COMPILARE MYANIMELIST.NET/APICONFIG/CREATE</span>
                 </span>
 
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -678,7 +694,7 @@ export const MalView: React.FC<MalViewProps> = ({
                       textDecoration: 'none',
                     }}
                   >
-                    <ExternalLinkIcon size={12} aria-hidden="true" />
+                    <ExternalLinkIcon size={12} color="#3B82F6" aria-hidden="true" />
                     LE TUE APP
                   </a>
                 </div>
@@ -686,31 +702,31 @@ export const MalView: React.FC<MalViewProps> = ({
 
               <div className="kuro-mal-guide-grid" style={{ fontFamily: FONT_MONO, fontSize: '12px' }}>
                 <span style={{ color: oledTheme.colors.textSecondary, fontWeight: 700 }}>
-                  App Name *
+                  APP NAME *
                 </span>
-                <span style={{ color: '#FFFFFF', textTransform: 'none' }}>
-                  Es. <code className="raw-token">KuroTV Sync</code> (nome libero)
+                <span style={{ color: '#FFFFFF' }}>
+                  ES. <code>KUROTV SYNC</code> (NOME LIBERO)
                 </span>
 
                 <span style={{ color: oledTheme.colors.textSecondary, fontWeight: 700 }}>
-                  App Type *
+                  APP TYPE *
                 </span>
-                <span style={{ color: '#FFFFFF', textTransform: 'none' }}>
-                  Seleziona{' '}
-                  <strong style={{ color: '#10B981' }}>Android</strong> oppure{' '}
-                  <strong style={{ color: '#10B981' }}>other</strong>{' '}
+                <span style={{ color: '#FFFFFF' }}>
+                  SELEZIONA{' '}
+                  <strong style={{ color: '#10B981' }}>ANDROID</strong> OPPURE{' '}
+                  <strong style={{ color: '#10B981' }}>OTHER</strong>{' '}
                   <span style={{ color: '#F59E0B' }}>
-                    (NON &quot;web&quot;, altrimenti MAL genera un Client Secret incompatibile con
-                    l&apos;app mobile KuroTV_M)
+                    (NON &quot;WEB&quot;, ALTRIMENTI MAL GENERA UN CLIENT SECRET INCOMPATIBILE CON
+                    L&apos;APP MOBILE KUROTV_M)
                   </span>
                 </span>
 
                 <span style={{ color: oledTheme.colors.textSecondary, fontWeight: 700 }}>
-                  App Description *
+                  APP DESCRIPTION *
                 </span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <span style={{ color: oledTheme.colors.textSecondary, textTransform: 'none' }}>
-                    50–500 caratteri, senza simboli o caratteri speciali. Esempio pronto (69 car.):
+                  <span style={{ color: oledTheme.colors.textSecondary }}>
+                    50–500 CARATTERI, SENZA SIMBOLI O CARATTERI SPECIALI. ESEMPIO PRONTO (69 CAR.):
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <code
@@ -731,18 +747,18 @@ export const MalView: React.FC<MalViewProps> = ({
                       variant="secondary"
                       size="sm"
                       onClick={() =>
-                        handleCopy('description', MAL_SAMPLE_DESCRIPTION, 'App Description')
+                        handleCopy('description', MAL_SAMPLE_DESCRIPTION, 'APP DESCRIPTION')
                       }
                       aria-label={
                         copiedKey === 'description'
-                          ? 'Copiato App Description'
-                          : 'Copia App Description'
+                          ? 'COPIATO APP DESCRIPTION'
+                          : 'COPIA APP DESCRIPTION'
                       }
                       icon={
                         copiedKey === 'description' ? (
                           <CheckIcon size={12} color="#10B981" aria-hidden="true" />
                         ) : (
-                          <CopyIcon size={12} aria-hidden="true" />
+                          <CopyIcon size={12} color="#3B82F6" aria-hidden="true" />
                         )
                       }
                     >
@@ -752,12 +768,12 @@ export const MalView: React.FC<MalViewProps> = ({
                 </div>
 
                 <span style={{ color: oledTheme.colors.primary, fontWeight: 700 }}>
-                  App Redirect URL *
+                  APP REDIRECT URL *
                 </span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <span style={{ color: oledTheme.colors.textSecondary, textTransform: 'none' }}>
-                    Inserisci entrambe le URL su righe separate (&quot;Separate multiple URLs with
-                    line breaks&quot;) per usare lo stesso Client ID su Web Panel e Mobile:
+                  <span style={{ color: oledTheme.colors.textSecondary }}>
+                    INSERISCI ENTRAMBE LE URL SU RIGHE SEPARATE (&quot;SEPARATE MULTIPLE URLS WITH
+                    LINE BREAKS&quot;) PER USARE LO STESSO CLIENT ID SU WEB PANEL E MOBILE:
                   </span>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -779,13 +795,13 @@ export const MalView: React.FC<MalViewProps> = ({
                       variant="secondary"
                       size="sm"
                       onClick={() =>
-                        handleCopy('web-redirect', webRedirectUri, 'Redirect URL Web Panel')
+                        handleCopy('web-redirect', webRedirectUri, 'REDIRECT URL WEB PANEL')
                       }
                       icon={
                         copiedKey === 'web-redirect' ? (
                           <CheckIcon size={12} color="#10B981" aria-hidden="true" />
                         ) : (
-                          <CopyIcon size={12} aria-hidden="true" />
+                          <CopyIcon size={12} color="#3B82F6" aria-hidden="true" />
                         )
                       }
                     >
@@ -815,14 +831,14 @@ export const MalView: React.FC<MalViewProps> = ({
                         handleCopy(
                           'mobile-redirect',
                           MAL_MOBILE_REDIRECT_URI,
-                          'Redirect URL KuroTV Mobile'
+                          'REDIRECT URL KUROTV MOBILE'
                         )
                       }
                       icon={
                         copiedKey === 'mobile-redirect' ? (
                           <CheckIcon size={12} color="#10B981" aria-hidden="true" />
                         ) : (
-                          <CopyIcon size={12} aria-hidden="true" />
+                          <CopyIcon size={12} color="#3B82F6" aria-hidden="true" />
                         )
                       }
                     >
@@ -839,7 +855,7 @@ export const MalView: React.FC<MalViewProps> = ({
                         handleCopy(
                           'both-redirects',
                           bothRedirectUris,
-                          'Entrambe le Redirect URL'
+                          'ENTRAMBE LE REDIRECT URL'
                         )
                       }
                       icon={
@@ -858,7 +874,7 @@ export const MalView: React.FC<MalViewProps> = ({
                 </div>
 
                 <span style={{ color: oledTheme.colors.textSecondary, fontWeight: 700 }}>
-                  Homepage URL *
+                  HOMEPAGE URL *
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <code
@@ -878,15 +894,15 @@ export const MalView: React.FC<MalViewProps> = ({
                     type="button"
                     variant="secondary"
                     size="sm"
-                    onClick={() => handleCopy('homepage', webOrigin, 'Homepage URL')}
+                    onClick={() => handleCopy('homepage', webOrigin, 'HOMEPAGE URL')}
                     aria-label={
-                      copiedKey === 'homepage' ? 'Copiato Homepage URL' : 'Copia Homepage URL'
+                      copiedKey === 'homepage' ? 'COPIATO HOMEPAGE URL' : 'COPIA HOMEPAGE URL'
                     }
                     icon={
                       copiedKey === 'homepage' ? (
                         <CheckIcon size={12} color="#10B981" aria-hidden="true" />
                       ) : (
-                        <CopyIcon size={12} aria-hidden="true" />
+                        <CopyIcon size={12} color="#3B82F6" aria-hidden="true" />
                       )
                     }
                   >
@@ -895,31 +911,31 @@ export const MalView: React.FC<MalViewProps> = ({
                 </div>
 
                 <span style={{ color: oledTheme.colors.textSecondary, fontWeight: 700 }}>
-                  Logo / Privacy / Terms
+                  LOGO / PRIVACY / TERMS
                 </span>
-                <span style={{ color: oledTheme.colors.textMuted, textTransform: 'none' }}>
-                  Facoltativi (puoi lasciarli vuoti)
-                </span>
-
-                <span style={{ color: oledTheme.colors.textSecondary, fontWeight: 700 }}>
-                  Commercial *
-                </span>
-                <span style={{ color: '#FFFFFF', textTransform: 'none' }}>
-                  <strong>non-commercial</strong>
+                <span style={{ color: oledTheme.colors.textMuted }}>
+                  FACOLTATIVI (PUOI LASCIARLI VUOTI)
                 </span>
 
                 <span style={{ color: oledTheme.colors.textSecondary, fontWeight: 700 }}>
-                  Name / Company *
+                  COMMERCIAL *
                 </span>
-                <span style={{ color: '#FFFFFF', textTransform: 'none' }}>
-                  Il tuo nome o nickname
+                <span style={{ color: '#FFFFFF' }}>
+                  <strong style={{ color: '#10B981' }}>NON-COMMERCIAL</strong>
                 </span>
 
                 <span style={{ color: oledTheme.colors.textSecondary, fontWeight: 700 }}>
-                  Purpose of Use *
+                  NAME / COMPANY *
                 </span>
-                <span style={{ color: '#FFFFFF', textTransform: 'none' }}>
-                  <strong>hobbyist</strong> (oppure personal)
+                <span style={{ color: '#FFFFFF' }}>
+                  IL TUO NOME O NICKNAME
+                </span>
+
+                <span style={{ color: oledTheme.colors.textSecondary, fontWeight: 700 }}>
+                  PURPOSE OF USE *
+                </span>
+                <span style={{ color: '#FFFFFF' }}>
+                  <strong style={{ color: '#10B981' }}>HOBBYIST</strong> (OPPURE PERSONAL)
                 </span>
               </div>
             </div>
@@ -959,10 +975,9 @@ export const MalView: React.FC<MalViewProps> = ({
                     fontFamily: FONT_MONO,
                     fontSize: '10px',
                     color: oledTheme.colors.textMuted,
-                    textTransform: 'none',
                   }}
                 >
-                  Ogni profilo mantiene un accesso e token MAL indipendente.
+                  OGNI PROFILO MANTIENE UN ACCESSO E TOKEN MAL INDIPENDENTE.
                 </span>
                 <select
                   id="mal-profile-select"
@@ -988,7 +1003,7 @@ export const MalView: React.FC<MalViewProps> = ({
                     const acc = accounts.find((a) => a.profileId === p.id);
                     const malLabel = acc?.connected
                       ? acc.username
-                        ? ` (@${acc.username})`
+                        ? ` (@${acc.username.toUpperCase()})`
                         : ' (CONNESSO)'
                       : ' (NON ASSOCIATO)';
                     return (
@@ -997,7 +1012,7 @@ export const MalView: React.FC<MalViewProps> = ({
                         value={p.id}
                         style={{ backgroundColor: '#121212', color: '#FFFFFF' }}
                       >
-                        {p.name}
+                        {p.name.toUpperCase()}
                         {malLabel}
                       </option>
                     );
@@ -1025,10 +1040,9 @@ export const MalView: React.FC<MalViewProps> = ({
                     fontFamily: FONT_MONO,
                     fontSize: '10px',
                     color: oledTheme.colors.textMuted,
-                    textTransform: 'none',
                   }}
                 >
-                  16–128 caratteri alfanumerici da apiconfig. Non serve alcun Client Secret.
+                  16–128 CARATTERI ALFANUMERICI DA APICONFIG. NON SERVE ALCUN CLIENT SECRET.
                 </span>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                   <input
@@ -1055,7 +1069,7 @@ export const MalView: React.FC<MalViewProps> = ({
                         ? 'mal-client-id-hint mal-client-id-error'
                         : 'mal-client-id-hint'
                     }
-                    placeholder="Incolla il Client ID MAL..."
+                    placeholder="INCOLLA IL CLIENT ID MAL..."
                     style={{
                       width: '100%',
                       padding: '10px 12px',
@@ -1086,10 +1100,9 @@ export const MalView: React.FC<MalViewProps> = ({
                       fontFamily: FONT_MONO,
                       fontSize: '11px',
                       color: '#EF4444',
-                      textTransform: 'none',
                     }}
                   >
-                    <AlertCircleIcon size={13} aria-hidden="true" />
+                    <AlertCircleIcon size={13} color="#EF4444" aria-hidden="true" />
                     <span>{clientIdError}</span>
                   </div>
                 )}
@@ -1133,12 +1146,19 @@ export const MalView: React.FC<MalViewProps> = ({
                       fontFamily: FONT_MONO,
                       fontSize: '11px',
                       cursor: 'pointer',
-                      textTransform: 'none',
                     }}
                   >
-                    <KeyIcon size={11} aria-hidden="true" />
+                    <KeyIcon
+                      size={11}
+                      color={
+                        normalizeMalClientId(clientIdInput) === entry.clientId
+                          ? '#10B981'
+                          : '#F59E0B'
+                      }
+                      aria-hidden="true"
+                    />
                     <span>
-                      {entry.label}: {formatClientIdPreview(entry.clientId)}
+                      {entry.label}: <span className="raw-token">{formatClientIdPreview(entry.clientId)}</span>
                     </span>
                   </button>
                 ))}
@@ -1161,14 +1181,13 @@ export const MalView: React.FC<MalViewProps> = ({
                   fontFamily: FONT_MONO,
                   fontSize: '11px',
                   color: selectedAccount?.connected ? '#F59E0B' : oledTheme.colors.textMuted,
-                  textTransform: 'none',
                 }}
               >
                 {selectedAccount?.connected
-                  ? `Il profilo è già collegato${
-                      selectedAccount.username ? ` a @${selectedAccount.username}` : ''
-                    }: procedendo verrà sostituito l'accesso corrente.`
-                  : 'Verrai reindirizzato su MyAnimeList per autorizzare il profilo e tornerai qui automaticamente.'}
+                  ? `IL PROFILO È GIÀ COLLEGATO${
+                      selectedAccount.username ? ` A @${selectedAccount.username.toUpperCase()}` : ''
+                    }: PROCEDENDO VERRÀ SOSTITUITO L'ACCESSO CORRENTE.`
+                  : 'VERRAI REINDIRIZZATO SU MYANIMELIST PER AUTORIZZARE IL PROFILO E TORNERAI QUI AUTOMATICAMENTE.'}
               </span>
 
               <Button
@@ -1286,7 +1305,7 @@ export const MalView: React.FC<MalViewProps> = ({
                     {canShowPicture ? (
                       <img
                         src={acc.picture!}
-                        alt={`Avatar MyAnimeList di ${acc.username || acc.profileName}`}
+                        alt={`AVATAR MYANIMELIST DI ${(acc.username || acc.profileName).toUpperCase()}`}
                         onError={() =>
                           setBrokenPictures((prev) => ({ ...prev, [acc.profileId]: true }))
                         }
@@ -1310,11 +1329,10 @@ export const MalView: React.FC<MalViewProps> = ({
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          color: oledTheme.colors.textSecondary,
                           flexShrink: 0,
                         }}
                       >
-                        <UserIcon size={18} aria-hidden="true" />
+                        <MalIcon size={22} aria-hidden="true" />
                       </div>
                     )}
 
@@ -1324,7 +1342,6 @@ export const MalView: React.FC<MalViewProps> = ({
                           href={`https://myanimelist.net/profile/${encodeURIComponent(acc.username)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="raw-token"
                           style={{
                             color: '#FFFFFF',
                             fontFamily: FONT_MONO,
@@ -1336,8 +1353,8 @@ export const MalView: React.FC<MalViewProps> = ({
                             gap: '5px',
                           }}
                         >
-                          <span>@{acc.username}</span>
-                          <ExternalLinkIcon size={12} color={oledTheme.colors.textMuted} aria-hidden="true" />
+                          <span>@{acc.username.toUpperCase()}</span>
+                          <ExternalLinkIcon size={12} color="#3B82F6" aria-hidden="true" />
                         </a>
                       ) : (
                         <span
@@ -1397,10 +1414,10 @@ export const MalView: React.FC<MalViewProps> = ({
                               handleCopy(
                                 clientCopyKey,
                                 acc.clientId!,
-                                `Client ID profilo ${acc.profileName}`
+                                `CLIENT ID PROFILO ${acc.profileName.toUpperCase()}`
                               )
                             }
-                            aria-label={`Copia Client ID di ${acc.profileName}`}
+                            aria-label={`COPIA CLIENT ID DI ${acc.profileName.toUpperCase()}`}
                             style={{
                               background: 'transparent',
                               border: `1px solid ${oledTheme.colors.border}`,
@@ -1421,7 +1438,7 @@ export const MalView: React.FC<MalViewProps> = ({
                             {copiedKey === clientCopyKey ? (
                               <CheckIcon size={12} color="#10B981" aria-hidden="true" />
                             ) : (
-                              <CopyIcon size={12} aria-hidden="true" />
+                              <CopyIcon size={12} color="#3B82F6" aria-hidden="true" />
                             )}
                           </button>
                         )}
@@ -1433,7 +1450,6 @@ export const MalView: React.FC<MalViewProps> = ({
                       <span
                         style={{
                           color: acc.isExpired ? '#F59E0B' : '#FFFFFF',
-                          textTransform: 'none',
                         }}
                       >
                         {formatDateTime(acc.expiresAt)}
@@ -1442,7 +1458,7 @@ export const MalView: React.FC<MalViewProps> = ({
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                       <span style={{ color: oledTheme.colors.textMuted }}>AGGIORNATO:</span>
-                      <span style={{ color: oledTheme.colors.textSecondary, textTransform: 'none' }}>
+                      <span style={{ color: oledTheme.colors.textSecondary }}>
                         {formatDateTime(acc.updatedAt)}
                       </span>
                     </div>
@@ -1465,8 +1481,8 @@ export const MalView: React.FC<MalViewProps> = ({
                 >
                   <span>NESSUN ACCOUNT MYANIMELIST ASSOCIATO A QUESTO PROFILO.</span>
                   {acc.revokedAt ? (
-                    <span style={{ fontSize: '10px', textTransform: 'none' }}>
-                      Scollegato il {formatDateTime(acc.revokedAt)} (tombstone attivo per i device).
+                    <span style={{ fontSize: '10px', color: '#F59E0B' }}>
+                      SCOLLEGATO IL {formatDateTime(acc.revokedAt)} (TOMBSTONE ATTIVO PER I DEVICE).
                     </span>
                   ) : null}
                 </div>
@@ -1492,8 +1508,8 @@ export const MalView: React.FC<MalViewProps> = ({
                       size="sm"
                       loading={refreshingId === acc.profileId}
                       onClick={() => handleRefreshAccount(acc)}
-                      icon={<RefreshIcon size={12} aria-hidden="true" />}
-                      aria-label={`Aggiorna token MAL (${acc.profileName})`}
+                      icon={<RefreshIcon size={12} color="#10B981" aria-hidden="true" />}
+                      aria-label={`AGGIORNA TOKEN MAL (${acc.profileName.toUpperCase()})`}
                     >
                       AGGIORNA
                     </Button>
@@ -1502,8 +1518,8 @@ export const MalView: React.FC<MalViewProps> = ({
                       variant="secondary"
                       size="sm"
                       onClick={() => handleFocusConnectForProfile(acc)}
-                      icon={<LinkIcon size={12} aria-hidden="true" />}
-                      aria-label={`Ricollega MAL (${acc.profileName})`}
+                      icon={<LinkIcon size={12} color="#3B82F6" aria-hidden="true" />}
+                      aria-label={`RICOLLEGA MAL (${acc.profileName.toUpperCase()})`}
                     >
                       RICOLLEGA
                     </Button>
@@ -1514,7 +1530,7 @@ export const MalView: React.FC<MalViewProps> = ({
                       loading={disconnectingId === acc.profileId}
                       onClick={() => setConfirmDisconnect({ isOpen: true, account: acc })}
                       icon={<TrashIcon size={12} aria-hidden="true" />}
-                      aria-label={`Disconnetti MAL (${acc.profileName})`}
+                      aria-label={`DISCONNETTI MAL (${acc.profileName.toUpperCase()})`}
                     >
                       DISCONNETTI
                     </Button>
@@ -1526,7 +1542,7 @@ export const MalView: React.FC<MalViewProps> = ({
                     size="sm"
                     onClick={() => handleFocusConnectForProfile(acc)}
                     icon={<LinkIcon size={12} aria-hidden="true" />}
-                    aria-label={`Associa MAL (${acc.profileName})`}
+                    aria-label={`ASSOCIA MAL (${acc.profileName.toUpperCase()})`}
                   >
                     ASSOCIA MAL
                   </Button>
@@ -1543,12 +1559,12 @@ export const MalView: React.FC<MalViewProps> = ({
         onClose={() => setConfirmDisconnect({ isOpen: false, account: null })}
         onConfirm={handleConfirmDisconnect}
         title="DISCONNETTI MYANIMELIST"
-        message={`Vuoi scollegare l'account MAL${
+        message={`VUOI SCOLLEGARE L'ACCOUNT MAL${
           confirmDisconnect.account?.username
-            ? ` (@${confirmDisconnect.account.username})`
+            ? ` (@${confirmDisconnect.account.username.toUpperCase()})`
             : ''
-        } dal profilo "${confirmDisconnect.account?.profileName || ''}"?`}
-        submessage="I token verranno rimossi e verrà registrato un tombstone di disconnessione verso KuroTV Mobile. Cronologia e preferiti restano intatti."
+        } DAL PROFILO "${(confirmDisconnect.account?.profileName || '').toUpperCase()}"?`}
+        submessage="I TOKEN VERRANNO RIMOSSI E VERRÀ REGISTRATO UN TOMBSTONE DI DISCONNESSIONE VERSO KUROTV MOBILE. CRONOLOGIA E PREFERITI RESTANO INTATTI."
         confirmLabel="DISCONNETTI MAL"
         variant="danger"
         loading={!!disconnectingId}

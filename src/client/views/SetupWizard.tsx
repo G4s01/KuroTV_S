@@ -24,7 +24,7 @@ interface SetupWizardProps {
 export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
   const [masterPassword, setMasterPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [profileName, setProfileName] = useState('Principale');
+  const [profileName, setProfileName] = useState('PRINCIPALE');
   const [avatarColor, setAvatarColor] = useState('#E50914');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -318,7 +318,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onSetupSuccess }) => {
                     key={color}
                     type="button"
                     onClick={() => setAvatarColor(color)}
-                    aria-label={`Select color ${color}`}
+                    aria-label={`SELEZIONA COLORE ${color}`}
                     style={{
                       width: '32px',
                       height: '32px',

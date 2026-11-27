@@ -45,10 +45,11 @@ Kuro è una suite coordinata per lo streaming anime concepita per coprire ogni s
 - **Protezione Progressi & "IN PARI"**: salvaguardia temporale contro regressioni di episodio/minutaggio, conservazione del completamento e propagazione dello stato `isCaughtUp`.
 - **Tombstone Dominance (90 giorni)**: cancellazioni propagate in modo deterministico su tutti i dispositivi con auto-purge periodico.
 
-### 🔐 Sync Credenziali MyAnimeList (`malAuth`)
+### 🔐 Sync Credenziali MyAnimeList (`malAuth`) & Gestione Web Panel
 - **Solo Stato & Token Auth**: sincronizza esclusivamente i dati OAuth MAL per singolo profilo (`clientId`, `accessToken`, `refreshToken`, `expiresAt`, `tokenType`, `username`, `userId`, `picture`, `updatedAt`, più tombstone `'mal_auth'`).
 - **Zero Dati Ridondanti & Zero Segreti Hardcoded**: nessuna lista anime, cache episodi, impostazione MAL o highwater locale viene inviato al server, e nessun segreto applicativo è presente nel Worker.
 - **Capability Detection Automatica**: `GET /api/sync/pull` espone sempre la chiave `deltas.malAuth` (`MalAuthSyncRecord | null`), rilevata nativamente da `KuroTV_M`.
+- **Associazione Diretta dalla Console Web**: nella tab `MYANIMELIST` è presente la gestione accessi per profilo (stato token, rinnovo `@me`/refresh, ricollegamento e disconnessione sincronizzata verso mobile), collegamento OAuth 2.0 PKCE tramite `Client ID` con callback dinamica `<origin>/mal-callback` e guida rapida campo-per-campo per `myanimelist.net/apiconfig/create`.
 
 ### 📺 Simple-Login Pairing & Sicurezza Web Crypto
 - **Accoppiamento Android TV**: codici brevi da 6 caratteri senza caratteri ambigui (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`) e QR `/pair` con consumo atomico.
@@ -84,6 +85,7 @@ npm run deploy
 1. Apri `https://<tuo-worker>.workers.dev` e completa il **Setup Wizard** impostando Master Password e profilo iniziale (`/api/setup` si blocca automaticamente al termine).
 2. Su **KuroTV Mobile**: scansiona il QR rapido dalla Console Web oppure accedi con URL e Master Password scegliendo il profilo.
 3. Su **KuroTV TV**: genera il codice a 6 caratteri e autorizzalo dalla Console Web (`/pair`) o dall'app Mobile.
+4. **MyAnimeList (opzionale)**: dalla tab **MYANIMELIST** associa un account MAL a ogni profilo con il tuo `Client ID` (seguendo la guida integrata per inserire su `myanimelist.net/apiconfig` sia `<tuo-worker>/mal-callback` sia `kurotv://mal-callback` con `App Type: Android` o `other`).
 
 ---
 

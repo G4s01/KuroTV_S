@@ -5,7 +5,7 @@ export const MAL_API_CONFIG_URL = 'https://myanimelist.net/apiconfig';
 export const MAL_API_CONFIG_CREATE_URL = 'https://myanimelist.net/apiconfig/create';
 export const MAL_MOBILE_REDIRECT_URI = 'kurotv://mal-callback';
 export const MAL_SAMPLE_DESCRIPTION =
-  'Client personale per sincronizzare anime visti e preferiti con KuroTV';
+  'CLIENT PERSONALE PER SINCRONIZZARE ANIME VISTI E PREFERITI CON KUROTV';
 
 const PENDING_OAUTH_STORAGE_KEY = 'kurosync_mal_oauth_pending';
 const LAST_CLIENT_ID_STORAGE_KEY = 'kurosync_mal_last_client_id';
@@ -158,15 +158,15 @@ export function completeMalOAuthFromSearch(search: string): Promise<MalCallbackO
         profileId: pending?.profileId,
         message:
           error === 'access_denied'
-            ? 'Autorizzazione annullata su MyAnimeList.'
-            : `Errore MyAnimeList: ${detail}`,
+            ? 'AUTORIZZAZIONE ANNULLATA SU MYANIMELIST.'
+            : `ERRORE MYANIMELIST: ${detail.toUpperCase()}`,
       };
     }
 
     if (!pending || !pending.createdAt || Date.now() - pending.createdAt > PENDING_TTL_MS) {
       return {
         ok: false,
-        message: 'Sessione OAuth MAL scaduta o mancante. Avvia nuovamente il collegamento.',
+        message: 'SESSIONE OAUTH MAL SCADUTA O MANCANTE. AVVIA NUOVAMENTE IL COLLEGAMENTO.',
       };
     }
 
@@ -174,7 +174,7 @@ export function completeMalOAuthFromSearch(search: string): Promise<MalCallbackO
       return {
         ok: false,
         profileId: pending.profileId,
-        message: 'Verifica di sicurezza CSRF (state) fallita. Riprova.',
+        message: 'VERIFICA DI SICUREZZA CSRF (STATE) FALLITA. RIPROVA.',
       };
     }
 
@@ -182,7 +182,7 @@ export function completeMalOAuthFromSearch(search: string): Promise<MalCallbackO
       return {
         ok: false,
         profileId: pending.profileId,
-        message: 'Codice di autorizzazione mancante nel callback di MyAnimeList.',
+        message: 'CODICE DI AUTORIZZAZIONE MANCANTE NEL CALLBACK DI MYANIMELIST.',
       };
     }
 
@@ -195,15 +195,20 @@ export function completeMalOAuthFromSearch(search: string): Promise<MalCallbackO
         redirectUri: pending.redirectUri,
       });
 
-      const userLabel = res.account?.username ? `@${res.account.username}` : 'account MAL';
+      const userLabel = res.account?.username
+        ? `@${res.account.username.toUpperCase()}`
+        : 'ACCOUNT MAL';
+      const profileLabel = res.account?.profileName
+        ? res.account.profileName.toUpperCase()
+        : '';
       return {
         ok: true,
         profileId: pending.profileId,
         account: res.account,
-        message: `${userLabel} associato al profilo ${res.account?.profileName || ''}`.trim(),
+        message: `${userLabel} ASSOCIATO AL PROFILO ${profileLabel}`.trim(),
       };
     } catch (err: any) {
-      const msg = String(err?.message || 'Scambio token MyAnimeList fallito.');
+      const msg = String(err?.message || 'SCAMBIO TOKEN MYANIMELIST FALLITO.').toUpperCase();
       const errCode = String(err?.data?.errorCode || '').toLowerCase();
       const needsPublicType =
         errCode === 'invalid_client' ||
@@ -214,7 +219,7 @@ export function completeMalOAuthFromSearch(search: string): Promise<MalCallbackO
         ok: false,
         profileId: pending.profileId,
         message: needsPublicType
-          ? `${msg} (Verifica che su MyAnimeList "App Type" sia "Android" o "other", non "web", e che la Redirect URL corrisponda esattamente.)`
+          ? `${msg} (VERIFICA CHE SU MYANIMELIST "APP TYPE" SIA "ANDROID" O "OTHER", NON "WEB", E CHE LA REDIRECT URL CORRISPONDA ESATTAMENTE.)`
           : msg,
       };
     }

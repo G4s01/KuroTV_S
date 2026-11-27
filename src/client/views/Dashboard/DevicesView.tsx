@@ -64,7 +64,9 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
       await fetchDevices();
       setEditingDevice(null);
     } catch (err: any) {
-      setEditDeviceError(err?.message || 'IMPOSSIBILE RINOMINARE IL DISPOSITIVO.');
+      setEditDeviceError(
+        err?.message ? String(err.message).toUpperCase() : 'IMPOSSIBILE RINOMINARE IL DISPOSITIVO.'
+      );
     } finally {
       setSavingDevice(false);
     }
@@ -95,7 +97,9 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
       list.sort((a, b) => (b.last_seen_at || b.created_at) - (a.last_seen_at || a.created_at));
       setDevices(list);
     } catch (err: any) {
-      setError(err?.message || 'Impossibile caricare i dispositivi.');
+      setError(
+        err?.message ? String(err.message).toUpperCase() : 'IMPOSSIBILE CARICARE I DISPOSITIVI.'
+      );
     } finally {
       setLoading(false);
     }
@@ -114,7 +118,9 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
       setQrToken(res.qrToken);
       setQrExpiresAt(res.expiresAt);
     } catch (err: any) {
-      setError(err?.message || 'Impossibile generare il token QR monouso.');
+      setError(
+        err?.message ? String(err.message).toUpperCase() : 'IMPOSSIBILE GENERARE IL TOKEN QR MONOUSO.'
+      );
     } finally {
       setQrLoading(false);
     }
@@ -240,8 +246,9 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
     setConfirmModal({
       isOpen: true,
       title: 'DISCONNETTI DISPOSITIVO',
-      message: `Vuoi disconnettere "${name}"?`,
-      submessage: 'La sessione del dispositivo verrà invalidata immediatamente e le successive richieste saranno rifiutate.',
+      message: `VUOI DISCONNETTERE "${name.toUpperCase()}"?`,
+      submessage:
+        'LA SESSIONE DEL DISPOSITIVO VERRÀ INVALIDATA IMMEDIATAMENTE E LE SUCCESSIVE RICHIESTE SARANNO RIFIUTATE.',
       confirmLabel: 'DISCONNETTI',
       action: async () => {
         setActionId(id);
@@ -249,7 +256,9 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
           await api.revokeDevice(id);
           await fetchDevices();
         } catch (err: any) {
-          setError(`Errore durante la disconnessione: ${err?.message || 'Errore sconosciuto'}`);
+          setError(
+            `ERRORE DURANTE LA DISCONNESSIONE: ${(err?.message || 'ERRORE SCONOSCIUTO').toUpperCase()}`
+          );
         } finally {
           setActionId(null);
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
@@ -263,8 +272,8 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
     setConfirmModal({
       isOpen: true,
       title: 'ELIMINA DEFINITIVAMENTE',
-      message: `Rimuovere definitivamente "${name}"?`,
-      submessage: 'Il record verrà eliminato in modo permanente dal database D1.',
+      message: `RIMUOVERE DEFINITIVAMENTE "${name.toUpperCase()}"?`,
+      submessage: 'IL RECORD VERRÀ ELIMINATO IN MODO PERMANENTE DAL DATABASE D1.',
       confirmLabel: 'ELIMINA',
       action: async () => {
         setActionId(id);
@@ -272,7 +281,9 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
           await api.deleteDevicePermanently(id);
           await fetchDevices();
         } catch (err: any) {
-          setError(`Errore durante l'eliminazione: ${err?.message || 'Errore sconosciuto'}`);
+          setError(
+            `ERRORE DURANTE L'ELIMINAZIONE: ${(err?.message || 'ERRORE SCONOSCIUTO').toUpperCase()}`
+          );
         } finally {
           setActionId(null);
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
@@ -286,8 +297,9 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
     setConfirmModal({
       isOpen: true,
       title: 'PULISCI DISCONNESSI',
-      message: 'Rimuovere definitivamente tutte le sessioni disconnesse?',
-      submessage: 'Tutti i dispositivi revocati verranno cancellati in modo permanente dal database D1.',
+      message: 'RIMUOVERE DEFINITIVAMENTE TUTTE LE SESSIONI DISCONNESSE?',
+      submessage:
+        'TUTTI I DISPOSITIVI REVOCATI VERRANNO CANCELLATI IN MODO PERMANENTE DAL DATABASE D1.',
       confirmLabel: 'PULISCI TUTTO',
       action: async () => {
         setLoading(true);
@@ -295,7 +307,9 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
           await api.purgeRevokedDevices(activeProfileId || undefined);
           await fetchDevices();
         } catch (err: any) {
-          setError(`Errore durante la pulizia: ${err?.message || 'Errore sconosciuto'}`);
+          setError(
+            `ERRORE DURANTE LA PULIZIA: ${(err?.message || 'ERRORE SCONOSCIUTO').toUpperCase()}`
+          );
         } finally {
           setLoading(false);
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
@@ -341,9 +355,13 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
               color: '#FFFFFF',
               margin: '0 0 4px 0',
               textTransform: 'uppercase',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
             }}
           >
-            DISPOSITIVI CONNESSI ({devices.length})
+            <TvIcon size={20} color="#10B981" aria-hidden="true" />
+            <span>DISPOSITIVI CONNESSI ({devices.length})</span>
           </h2>
           <p
             style={{
@@ -378,7 +396,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
             variant="secondary"
             size="sm"
             onClick={() => setIsQrModalOpen(true)}
-            icon={<QrIcon size={14} />}
+            icon={<QrIcon size={14} color="#3B82F6" aria-hidden="true" />}
           >
             COLLEGA SMARTPHONE
           </Button>
@@ -387,7 +405,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
             variant="primary"
             size="sm"
             onClick={onOpenTvPair}
-            icon={<TvIcon size={14} />}
+            icon={<TvIcon size={14} aria-hidden="true" />}
           >
             AUTORIZZA TV
           </Button>
@@ -397,8 +415,9 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
             size="sm"
             onClick={fetchDevices}
             loading={loading}
-            icon={<RefreshIcon size={14} />}
-            title="Aggiorna lista"
+            icon={<RefreshIcon size={14} color="#10B981" aria-hidden="true" />}
+            title="AGGIORNA LISTA"
+            aria-label="AGGIORNA LISTA"
           />
         </div>
       </div>
@@ -428,7 +447,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
             fontFamily: FONT_MONO,
           }}
         >
-          Nessun dispositivo registrato finora. Collega uno smartphone o una Android TV.
+          NESSUN DISPOSITIVO REGISTRATO FINORA. COLLEGA UNO SMARTPHONE O UNA ANDROID TV.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -508,9 +527,11 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                           marginTop: '4px',
                         }}
                       >
-                        Piattaforma: {device.platform} • Ultimo accesso:{' '}
+                        PIATTAFORMA: {device.platform.toUpperCase()} • ULTIMO ACCESSO:{' '}
                         <span style={{ color: '#FFFFFF' }}>
-                          {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : 'N/D'}
+                          {device.last_seen_at
+                            ? new Date(device.last_seen_at).toLocaleString().toUpperCase()
+                            : 'N/D'}
                         </span>
                       </div>
                     </div>
@@ -521,7 +542,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                       variant="secondary"
                       size="sm"
                       onClick={() => handleOpenEditDevice(device)}
-                      title="Rinomina dispositivo"
+                      title="RINOMINA DISPOSITIVO"
                       style={{ width: '90px' }}
                     >
                       MODIFICA
@@ -531,8 +552,8 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                       size="sm"
                       loading={actionId === device.id}
                       onClick={() => handleRevoke(device.id, device.name)}
-                      icon={<TrashIcon size={12} />}
-                      title="Disconnetti sessione"
+                      icon={<TrashIcon size={12} aria-hidden="true" />}
+                      title="DISCONNETTI SESSIONE"
                       style={{ width: '135px' }}
                     >
                       DISCONNETTI
@@ -631,12 +652,17 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                           marginTop: '4px',
                         }}
                       >
-                        Piattaforma: {device.platform} • Ultimo accesso:{' '}
+                        PIATTAFORMA: {device.platform.toUpperCase()} • ULTIMO ACCESSO:{' '}
                         <span style={{ color: oledTheme.colors.textMuted }}>
-                          {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : 'N/D'}
+                          {device.last_seen_at
+                            ? new Date(device.last_seen_at).toLocaleString().toUpperCase()
+                            : 'N/D'}
                         </span>
                         {device.revoked_at && (
-                          <span> • Disconnesso il: {new Date(device.revoked_at).toLocaleString()}</span>
+                          <span>
+                            {' '}
+                            • DISCONNESSO IL: {new Date(device.revoked_at).toLocaleString().toUpperCase()}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -647,7 +673,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                       variant="secondary"
                       size="sm"
                       onClick={() => handleOpenEditDevice(device)}
-                      title="Rinomina dispositivo"
+                      title="RINOMINA DISPOSITIVO"
                       style={{ width: '90px' }}
                     >
                       MODIFICA
@@ -657,8 +683,8 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                       size="sm"
                       loading={actionId === device.id}
                       onClick={() => handlePermanentDelete(device.id, device.name)}
-                      icon={<TrashIcon size={12} />}
-                      title="Elimina definitivamente dalla lista"
+                      icon={<TrashIcon size={12} aria-hidden="true" />}
+                      title="ELIMINA DEFINITIVAMENTE DALLA LISTA"
                       style={{ width: '135px' }}
                     >
                       RIMUOVI
@@ -825,7 +851,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                   size="sm"
                   onClick={generateQrToken}
                   loading={qrLoading}
-                  icon={<RefreshIcon size={12} />}
+                  icon={<RefreshIcon size={12} color="#10B981" aria-hidden="true" />}
                 >
                   RIGENERA QR
                 </Button>
@@ -871,7 +897,13 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                     size="sm"
                     onClick={handleCopyConnectUrl}
                     disabled={!connectUrl}
-                    icon={copied ? <CheckIcon size={14} color="#10B981" /> : <CopyIcon size={14} />}
+                    icon={
+                      copied ? (
+                        <CheckIcon size={14} color="#10B981" aria-hidden="true" />
+                      ) : (
+                        <CopyIcon size={14} color="#3B82F6" aria-hidden="true" />
+                      )
+                    }
                   >
                     {copied ? 'COPIATO' : 'COPIA'}
                   </Button>

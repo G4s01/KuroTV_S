@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#000000" />
     <meta name="description" content="KuroSync — Personal Cloudflare Sync Console for KuroTV Mobile & Android TV" />
     <link rel="icon" type="image/png" href="/icon.png" />
-    <title>KuroSync — Personal Cloudflare Sync Console</title>
+    <title>KUROSYNC — PERSONAL CLOUDFLARE SYNC CONSOLE</title>
     <style>
       *, *::before, *::after {
         box-sizing: border-box;
@@ -30,12 +30,19 @@
         display: flex;
         flex-direction: column;
       }
-      input, button, select, textarea {
+      input, button, select, option, textarea {
         font-family: inherit;
         text-transform: uppercase;
       }
-      input[type="password"], .raw-token, .code-preview {
+      input::placeholder, textarea::placeholder {
+        text-transform: uppercase;
+      }
+      input[type="password"], .raw-token, .code-preview, .raw-token::placeholder {
         text-transform: none;
+      }
+      button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+        outline: 2px solid #FFFFFF;
+        outline-offset: 2px;
       }
       /* Custom OLED Scrollbar */
       ::-webkit-scrollbar {

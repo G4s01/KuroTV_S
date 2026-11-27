@@ -8,7 +8,7 @@ Questo documento definisce le regole architetturali, i vincoli di dominio, gli s
 
 - **Runtime Backend**: Cloudflare Workers + [Hono](https://hono.dev/) (`src/worker/index.ts`, `src/worker/routes/*`, `src/worker/middleware/auth.ts`).
 - **Database**: Cloudflare D1 (SQLite serverless) con migrazioni incrementali in `migrations/` e bootstrap idempotente `ensureSchema()` in `src/worker/schema.ts`.
-- **Web Console OLED**: React 19 + TypeScript + Vite (`src/client/*`), servita tramite Workers Static Assets (`ASSETS` binding, `run_worker_first: ["/api/*"]`). Design OLED pitch-black (`#000000`, `#121212`, `#E50914`), tipografia monospace uppercase e modali di conferma in-app (`ConfirmModal.tsx`).
+- **Web Console OLED**: React 19 + TypeScript + Vite (`src/client/*`), servita tramite Workers Static Assets (`ASSETS` binding, `run_worker_first: ["/api/*"]`). Design OLED pitch-black (`#000000`, `#121212`, `#E50914`), tipografia monospace uppercase, callback OAuth `/mal-callback` (`src/client/malOAuth.ts`, `src/client/views/Dashboard/MalView.tsx`) e modali di conferma in-app (`ConfirmModal.tsx`).
 - **Client SDK Condiviso**: `packages/sync-client` (`@kurosync/sync-client`) — puro TypeScript con zero dipendenze runtime, compatibile con Hermes, React Native MMKV, Android TV, Node.js e browser. **Vietato** importare moduli `node:*` in `packages/sync-client/src/*` o `src/worker/*`.
 
 ---
@@ -42,6 +42,7 @@ Questo documento definisce le regole architetturali, i vincoli di dominio, gli s
 1. **Isolamento Stretto per `profile_id`**:
    - Tutte le tabelle dati utente (`favorites`, `continue_watching`, `watch_history`, `watch_progress`, `shared_settings`, `mal_auth`, `tombstones`) sono isolate per `profile_id` con `ON DELETE CASCADE` verso `profiles(id)` e rimozione esplicita nel batch atomico di `DELETE /api/profiles/:id` (`src/worker/routes/profiles.ts`).
    - L'override del profilo via `X-Profile-Id`, `?profileId=` o `body.profileId` è consentito esclusivamente alle sessioni `device_type = 'web'` e solo per ID profilo validi esistenti; per dispositivi `mobile`/`tv` fa fede unicamente il `profile_id` associato al token dispositivo. Non fidarsi mai di campi `profileId` annidati nei payload entità (es. `malAuth.profileId`).
+   - Gli endpoint `/api/mal/*` (`src/worker/routes/mal.ts`) espongono la lista multi-profilo `GET /api/mal/accounts` solo a sessioni `device_type = 'web'` (filtrata al proprio profilo per `mobile`/`tv`) senza mai includere `access_token` o `refresh_token`, e respingono con `403` ogni operazione cross-profilo da client non-web.
 
 2. **Regole Specifiche MyAnimeList Auth (`malAuth`)**:
    - **Scope esclusivo credenziali**: sincronizzare e salvare **SOLO** lo stato/credenziali auth MAL (`clientId`, `accessToken`, `refreshToken`, `expiresAt`, `tokenType`, `username`, `userId`, `picture`, `updatedAt`, più tombstone `'mal_auth'`). **MAI** sincronizzare o salvare liste MAL, cache episodi, impostazioni MAL o highwater locale.
@@ -52,6 +53,11 @@ Questo documento definisce le regole architetturali, i vincoli di dominio, gli s
      - Il tombstone `'mal_auth'` viene invalidato solo quando arriva un `malAuth` legittimo con `updatedAt > tombstone.deleted_at` (re-login).
      - `deletions` accetta `type === 'mal_auth'` (default `key = 'default'`), elimina la riga `mal_auth` solo se `updated_at <= deletedAt` e registra il tombstone con `deleted_at` e `server_deleted_at`.
      - `mergeLocalAndRemote()` in `packages/sync-client/src/merge.ts` gestisce la dominanza di `'mal_auth:default'` e `'mal_auth:malAuth'` e LWW su `malAuth.updatedAt`.
+   - **Gestione Web Panel & OAuth PKCE (`/api/mal/*`)**:
+     - L'associazione diretta dal pannello web (`MalView.tsx` + `/mal-callback`) usa PKCE `plain` senza `client_secret` (compatibile con `App Type: Android` o `other` su `myanimelist.net/apiconfig` e URL redirect dinamico `<window.location.origin>/mal-callback`).
+     - `POST /api/mal/oauth/exchange` e `POST /api/mal/accounts/:profileId/refresh` eseguono le chiamate verso `myanimelist.net/v1/oauth2/token` e `api.myanimelist.net/v2/users/@me` lato Worker (evitando CORS browser) e invalidano eventuali tombstones `'mal_auth'` al login.
+     - `DELETE /api/mal/accounts/:profileId` rimuove `mal_auth` e scrive il tombstone `'mal_auth'` (`key = 'default'`) per propagare il logout verso `KuroTV_M`.
+     - In `App.tsx`, il callback `/mal-callback` non deve essere annullato dal cleanup di `useEffect` quando la URL viene ripulita con `replaceState('/')` (`pendingMalCallbackSearch` + `isMountedRef`).
 
 3. **Doppio Clock: Logico Client vs Cursore di Replica Server**:
    - LWW e dominanza tombstones usano il timestamp logico client (`updated_at` / `deleted_at`).
@@ -63,7 +69,10 @@ Questo documento definisce le regole architetturali, i vincoli di dominio, gli s
 
 ---
 
-## 4. Pipeline di Verifica & Rilascio
+## 4. Test, Verifica & Rilascio
+
+- La suite di test usa Vitest 4 + `@cloudflare/vitest-plugin` (`vitest.config.ts`) con progetti ordinati tramite `sequence.groupOrder` (`client-sdk`: `0`, `workers`: `1`, `maxWorkers: 2`, `testTimeout`/`hookTimeout: 30000`).
+- Quando si wrappa `env.DB` (`D1Database`) in un `Proxy` nei test (es. `test/health.test.ts`), bindare sempre i metodi restituiti su `target` (`Reflect.get(target, prop, target)` + `.bind(target)`) per compatibilità con i campi privati di Miniflare/`workerd`.
 
 Prima di qualsiasi commit, rilascio o deploy, eseguire e verificare senza errori:
 

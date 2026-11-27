@@ -159,7 +159,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsDropdownOpen((prev) => !prev)}
-                  aria-label="Menù profili"
+                  aria-label="MENÙ PROFILI"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -184,7 +184,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       backgroundColor: activeProfile?.avatarColor || activeProfile?.avatar_color || '#E50914',
                     }}
                   />
-                  <span>{activeProfile?.name || 'Seleziona profilo'}</span>
+                  <span>{activeProfile?.name ? activeProfile.name.toUpperCase() : 'SELEZIONA PROFILO'}</span>
                   <span
                     style={{
                       display: 'inline-flex',
@@ -193,7 +193,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       color: oledTheme.colors.textMuted,
                     }}
                   >
-                    <ChevronDownIcon size={14} />
+                    <ChevronDownIcon size={14} aria-hidden="true" />
                   </span>
                 </button>
 
@@ -206,8 +206,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                       setIsDropdownOpen(false);
                       onOpenCreateProfile();
                     }}
-                    title="Aggiungi nuovo profilo"
-                    aria-label="Aggiungi nuovo profilo"
+                    title="AGGIUNGI NUOVO PROFILO"
+                    aria-label="AGGIUNGI NUOVO PROFILO"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -232,7 +232,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       e.currentTarget.style.backgroundColor = 'transparent';
                     }}
                   >
-                    <PlusIcon size={13} />
+                    <PlusIcon size={13} color="#10B981" aria-hidden="true" />
                   </button>
                 )}
               </div>
@@ -318,9 +318,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                                 backgroundColor: color,
                               }}
                             />
-                            <span>{p.name}</span>
+                            <span>{p.name.toUpperCase()}</span>
                           </div>
-                          {isActive && <CheckIcon size={14} color="#10B981" />}
+                          {isActive && <CheckIcon size={14} color="#10B981" aria-hidden="true" />}
                         </button>
                       );
                     })}
@@ -383,7 +383,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             variant="secondary"
             size="sm"
             onClick={onOpenTvPair}
-            icon={<TvIcon size={14} color="#E50914" />}
+            icon={<TvIcon size={14} color="#E50914" aria-hidden="true" />}
             title="ACCOPPIA ANDROID TV"
           >
             ACCOPPIA TV
@@ -394,7 +394,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             variant="secondary"
             size="sm"
             onClick={onOpenBackup}
-            icon={<DownloadIcon size={14} />}
+            icon={<DownloadIcon size={14} color="#F59E0B" aria-hidden="true" />}
             title="BACKUP & RIPRISTINO"
           >
             BACKUP
@@ -405,7 +405,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             variant="ghost"
             size="sm"
             onClick={onLogout}
-            icon={<LogOutIcon size={14} />}
+            icon={<LogOutIcon size={14} color="#EF4444" aria-hidden="true" />}
             title="DISCONNETTI"
             aria-label="DISCONNETTI"
           />

@@ -3,7 +3,14 @@ import { oledTheme, FONT_MONO } from '../../theme';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
-import { TrashIcon, RefreshIcon, FilmIcon } from '../../components/Icons';
+import {
+  TrashIcon,
+  RefreshIcon,
+  FilmIcon,
+  PlayIcon,
+  HeartIcon,
+  ClockIcon,
+} from '../../components/Icons';
 import { ConfirmModal } from '../../components/ConfirmModal';
 import {
   api,
@@ -48,7 +55,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
       setFavorites(data.deltas.favorites || []);
       setWatchHistory(data.deltas.watchHistory || []);
     } catch (err: any) {
-      setError(err?.message || 'Failed to fetch library.');
+      setError(err?.message ? String(err.message).toUpperCase() : 'IMPOSSIBILE CARICARE LA LIBRERIA.');
     } finally {
       setLoading(false);
     }
@@ -65,16 +72,16 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
   ) => {
     const typeLabel =
       type === 'continue_watching'
-        ? 'Continua a guardare'
+        ? 'CONTINUA A GUARDARE'
         : type === 'favorite'
-        ? 'Preferito'
-        : 'Cronologia visione';
+        ? 'PREFERITI'
+        : 'CRONOLOGIA VISIONE';
 
     setConfirmModal({
       isOpen: true,
       title: 'ELIMINA ELEMENTO',
-      message: `Sei sicuro di voler eliminare "${label}"?`,
-      submessage: `Questo elemento verrà rimosso da ${typeLabel} per il profilo attivo.`,
+      message: `SEI SICURO DI VOLER ELIMINARE "${label.toUpperCase()}"?`,
+      submessage: `QUESTO ELEMENTO VERRÀ RIMOSSO DA ${typeLabel} PER IL PROFILO ATTIVO.`,
       onConfirm: async () => {
         setDeletingKey(key);
         setError(null);
@@ -93,7 +100,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
           }
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         } catch (err: any) {
-          setError(`Impossibile eliminare l'elemento: ${err?.message || 'Errore sconosciuto'}`);
+          setError(
+            `IMPOSSIBILE ELIMINARE L'ELEMENTO: ${(err?.message || 'ERRORE SCONOSCIUTO').toUpperCase()}`
+          );
         } finally {
           setDeletingKey(null);
         }
@@ -119,6 +128,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
           <button
             onClick={() => setTab('continue_watching')}
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
               padding: '8px 16px',
               fontFamily: FONT_MONO,
               fontSize: '13px',
@@ -134,11 +146,15 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
               cursor: 'pointer',
             }}
           >
-            CONTINUE WATCHING ({continueWatching.length})
+            <PlayIcon size={14} color="#E50914" aria-hidden="true" />
+            <span>CONTINUE WATCHING ({continueWatching.length})</span>
           </button>
           <button
             onClick={() => setTab('favorites')}
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
               padding: '8px 16px',
               fontFamily: FONT_MONO,
               fontSize: '13px',
@@ -153,11 +169,15 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
               cursor: 'pointer',
             }}
           >
-            FAVORITES ({favorites.length})
+            <HeartIcon size={14} color="#EC4899" aria-hidden="true" />
+            <span>FAVORITES ({favorites.length})</span>
           </button>
           <button
             onClick={() => setTab('history')}
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
               padding: '8px 16px',
               fontFamily: FONT_MONO,
               fontSize: '13px',
@@ -172,7 +192,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
               cursor: 'pointer',
             }}
           >
-            WATCH HISTORY ({watchHistory.length})
+            <ClockIcon size={14} color="#3B82F6" aria-hidden="true" />
+            <span>WATCH HISTORY ({watchHistory.length})</span>
           </button>
         </div>
 
@@ -181,7 +202,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
           size="sm"
           onClick={fetchLibrary}
           loading={loading}
-          icon={<RefreshIcon size={14} />}
+          icon={<RefreshIcon size={14} color="#10B981" aria-hidden="true" />}
         >
           REFRESH
         </Button>
@@ -276,7 +297,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
                             color: oledTheme.colors.textMuted,
                           }}
                         >
-                          <FilmIcon size={32} />
+                          <FilmIcon size={32} color="#E50914" aria-hidden="true" />
                         </div>
                       )}
 
@@ -360,7 +381,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
                             fontFamily: FONT_MONO,
                           }}
                         >
-                          {item.percentage ? `${Math.round(item.percentage)}% watched` : 'In progress'}
+                          {item.percentage ? `${Math.round(item.percentage)}% WATCHED` : 'IN PROGRESS'}
                         </div>
                       </div>
 
@@ -451,7 +472,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
                           color: oledTheme.colors.textMuted,
                         }}
                       >
-                        <FilmIcon size={40} />
+                        <FilmIcon size={40} color="#E50914" aria-hidden="true" />
                       </div>
                     )}
                     {fav.status && (
@@ -484,7 +505,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
                           fontFamily: FONT_MONO,
                         }}
                       >
-                        {fav.releaseYear || fav.type || 'Anime'}
+                        {fav.releaseYear || fav.type || 'ANIME'}
                       </div>
                     </div>
                     <div
@@ -579,7 +600,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <span style={{ color: oledTheme.colors.textMuted, fontSize: '11px' }}>
-                        {item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : ''}
+                        {item.updatedAt ? new Date(item.updatedAt).toLocaleDateString().toUpperCase() : ''}
                       </span>
                       <Button
                         variant="ghost"
@@ -592,8 +613,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ activeProfileId }) => 
                             `${item.title} (EP ${item.episodeNumber})`
                           )
                         }
-                        icon={<TrashIcon size={14} color="#EF4444" />}
-                        title="Delete record"
+                        icon={<TrashIcon size={14} color="#EF4444" aria-hidden="true" />}
+                        title="ELIMINA RECORD"
+                        aria-label="ELIMINA RECORD"
                       />
                     </div>
                   </div>

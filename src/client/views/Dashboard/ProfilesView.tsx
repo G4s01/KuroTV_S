@@ -4,7 +4,15 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
 import { ConfirmModal } from '../../components/ConfirmModal';
-import { PlusIcon, TrashIcon, UserIcon, CheckIcon, EditIcon, LinkIcon } from '../../components/Icons';
+import {
+  PlusIcon,
+  TrashIcon,
+  UserIcon,
+  CheckIcon,
+  EditIcon,
+  LinkIcon,
+  MalIcon,
+} from '../../components/Icons';
 import { api, type MalAccountSummary, type ProfileRecord } from '../../api';
 
 const AVATAR_COLORS = [
@@ -79,7 +87,9 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
         onSelectProfile(res.profile.id);
       }
     } catch (err: any) {
-      setError(err?.message || 'Impossibile creare il profilo.');
+      setError(
+        err?.message ? String(err.message).toUpperCase() : 'IMPOSSIBILE CREARE IL PROFILO.'
+      );
     } finally {
       setCreating(false);
     }
@@ -106,7 +116,9 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
       await onRefreshProfiles();
       setEditingProfile(null);
     } catch (err: any) {
-      setError(err?.message || 'Impossibile aggiornare il profilo.');
+      setError(
+        err?.message ? String(err.message).toUpperCase() : 'IMPOSSIBILE AGGIORNARE IL PROFILO.'
+      );
     } finally {
       setSavingEdit(false);
     }
@@ -114,15 +126,16 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
 
   const handleDeleteProfile = (id: string, name: string) => {
     if (profiles.length <= 1) {
-      setError('Impossibile eliminare l\'unico profilo presente su questa istanza.');
+      setError("IMPOSSIBILE ELIMINARE L'UNICO PROFILO PRESENTE SU QUESTA ISTANZA.");
       return;
     }
 
     setConfirmModal({
       isOpen: true,
       title: 'ELIMINA PROFILO',
-      message: `Vuoi eliminare definitivamente il profilo "${name}"?`,
-      submessage: 'Tutti i dati associati (Continua a guardare, Preferiti, Cronologia, Impostazioni e associazione MAL) per questo profilo verranno rimossi permanentemente.',
+      message: `VUOI ELIMINARE DEFINITIVAMENTE IL PROFILO "${name.toUpperCase()}"?`,
+      submessage:
+        'TUTTI I DATI ASSOCIATI (CONTINUA A GUARDARE, PREFERITI, CRONOLOGIA, IMPOSTAZIONI E ASSOCIAZIONE MAL) PER QUESTO PROFILO VERRANNO RIMOSSI PERMANENTEMENTE.',
       confirmLabel: 'ELIMINA PROFILO',
       action: async () => {
         setDeletingId(id);
@@ -136,7 +149,9 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
             }
           }
         } catch (err: any) {
-          setError(`Errore durante l'eliminazione: ${err?.message || 'Errore sconosciuto'}`);
+          setError(
+            `ERRORE DURANTE L'ELIMINAZIONE: ${(err?.message || 'ERRORE SCONOSCIUTO').toUpperCase()}`
+          );
         } finally {
           setDeletingId(null);
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
@@ -167,9 +182,13 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
               color: '#FFFFFF',
               margin: '0 0 4px 0',
               textTransform: 'uppercase',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
             }}
           >
-            PROFILI ({profiles.length})
+            <UserIcon size={20} color="#3B82F6" aria-hidden="true" />
+            <span>PROFILI ({profiles.length})</span>
           </h2>
           <p
             style={{
@@ -266,7 +285,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
                           fontWeight: 700,
                         }}
                       >
-                        ACTIVE
+                        ATTIVO
                       </span>
                     )}
                   </div>
@@ -278,7 +297,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
                       marginTop: '4px',
                     }}
                   >
-                    Created: {new Date(p.created_at).toLocaleDateString()}
+                    CREATO: {new Date(p.created_at).toLocaleDateString().toUpperCase()}
                   </div>
                 </div>
               </div>
@@ -299,6 +318,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                    <MalIcon size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
                     <span
                       style={{
                         width: '7px',
@@ -313,7 +333,6 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
                       }}
                     />
                     <span
-                      className="raw-token"
                       style={{
                         color: malAcc?.connected ? '#FFFFFF' : oledTheme.colors.textMuted,
                         overflow: 'hidden',
@@ -322,7 +341,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
                       }}
                     >
                       {malAcc?.connected
-                        ? `MAL: ${malAcc.username ? `@${malAcc.username}` : 'CONNESSO'}`
+                        ? `MAL: ${malAcc.username ? `@${malAcc.username.toUpperCase()}` : 'CONNESSO'}`
                         : 'MAL: NON ASSOCIATO'}
                     </span>
                   </div>
@@ -332,8 +351,14 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
                     variant="ghost"
                     size="sm"
                     onClick={() => onManageMal(p.id)}
-                    icon={<LinkIcon size={11} aria-hidden="true" />}
-                    aria-label={`${malAcc?.connected ? 'Gestisci MAL' : 'Associa MAL'} per ${p.name}`}
+                    icon={
+                      <LinkIcon
+                        size={11}
+                        color={malAcc?.connected ? '#3B82F6' : oledTheme.colors.primary}
+                        aria-hidden="true"
+                      />
+                    }
+                    aria-label={`${malAcc?.connected ? 'GESTISCI MAL' : 'ASSOCIA MAL'} PER ${p.name.toUpperCase()}`}
                     style={{
                       padding: '3px 8px',
                       fontSize: '10px',
@@ -381,7 +406,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
                     variant="secondary"
                     size="sm"
                     onClick={() => handleOpenEdit(p)}
-                    icon={<EditIcon size={12} />}
+                    icon={<EditIcon size={12} color="#3B82F6" aria-hidden="true" />}
                     title="MODIFICA PROFILO"
                   >
                     MODIFICA
